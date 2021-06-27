@@ -15,7 +15,7 @@
   []
   (let [event-ch (async/chan 100)
         connection-ch (connections/connect-bot! token event-ch
-                                                :intents #{:guild-messages})
+                                                :intents #{:guilds :guild-messages})
         message-ch (messaging/start-connection! token)]
     (try
       (loop []
