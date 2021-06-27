@@ -1,0 +1,2 @@
+{:path ["src"]
+ :deps {org.suskalo/discljord {:mvn/version "1.2.3"}}}
