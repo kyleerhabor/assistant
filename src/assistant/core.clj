@@ -1,37 +1,22 @@
 (ns assistant.core
-  (:require [clojure.core.async :as async]
-            [clojure.edn :as edn]
-            [clojure.string :as string]
+  (:require [assistant.state :refer [state config]]
+            [assistant.events :refer [handler]]
+            [clojure.core.async :as async]
+            [discljord.events :as events]
             [discljord.connections :as connections]
             [discljord.messaging :as messaging]))
-
-(def token (-> "config.edn"
-               slurp
-               edn/read-string
-               :token))
 
 (defn -main
   "Runs the program."
   []
-  (let [event-ch (async/chan 100)
-        connection-ch (connections/connect-bot! token event-ch
-                                                :intents #{:guilds :guild-messages})
-        message-ch (messaging/start-connection! token)]
-    (try
-      (loop []
-        (let [[type data] (async/<!! event-ch)]
-          (when (and (= :message-create type)
-                     (-> data :author :bot not)
-                     (= "assistant greet" (-> data
-                                              :content
-                                              string/lower-case
-                                              string/triml)))
-            (messaging/create-message! message-ch (:channel-id data)
-                                       :content (str "Hello, " (-> data :author :username) ".")))
-          (when (= :channel-pins-update type)
-            (connections/disconnect-bot! connection-ch))
-          (when-not (= :disconnect type)
-            (recur))))
-      (finally
-        (messaging/stop-connection! message-ch)
-        (async/close! event-ch)))))
+  (let [event-channel (async/chan 100)
+        token (:token config)
+        connection-channel (connections/connect-bot! token event-channel
+                                                     :intents #{:guilds :guild-messages})
+        message-channel (messaging/start-connection! token)]
+    (reset! state {:connection connection-channel
+                   :event event-channel
+                   :message message-channel})
+    (events/message-pump! event-channel handler)
+    (messaging/stop-connection! message-channel)
+    (async/close! event-channel)))
