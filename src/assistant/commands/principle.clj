@@ -1,1 +1,0 @@
-(ns assistant.commands.principle)
