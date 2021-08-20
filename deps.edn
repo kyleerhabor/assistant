@@ -1,8 +1,11 @@
 {:paths ["src"]
+ :jvm-opts ["-Dclojure.tools.logging.factory=clojure.tools.logging.impl/slf4j-factory"]
  :deps {org.clojure/clojure {:mvn/version "1.10.3"}
+        org.clojure/core.async {:mvn/version "1.3.618"}
+        org.clojure/tools.logging {:mvn/version "1.1.0"}
         cheshire/cheshire {:mvn/version "5.10.1"} ; For decoding clj-http response bodies.
         clj-http/clj-http {:mvn/version "3.12.3"}
-        clj-tagsoup/clj-tagsoup {:mvn/version "0.3.0"}
+        hickory/hickory {:mvn/version "0.7.1"}
         org.suskalo/discljord {:git/url "https://github.com/IGJoshua/discljord.git"
                                ; Should be :git/sha but Calva doesn't work with it.
                                :sha "a417b0d543c68820ce0633b31d7c98c6b328c857"}}}

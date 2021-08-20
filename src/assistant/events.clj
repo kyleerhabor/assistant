@@ -21,3 +21,6 @@
 (defmethod handler :ready
   [_ _ data]
   (println (str "Connected as " (user-tag (:user data)) " (" (-> data :user :id) \))))
+
+(defmethod handler :default
+  [_ _ _])
