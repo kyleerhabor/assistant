@@ -1,5 +1,5 @@
 {:paths ["src"]
  :deps {org.clojure/clojure {:mvn/version "1.10.3"}
         org.suskalo/discljord {:git/url "https://github.com/IGJoshua/discljord.git"
-                               ; Should be :git/sha, but Calva doesn't work with it.
+                               ; Should be :git/sha but Calva doesn't work with it.
                                :sha "a417b0d543c68820ce0633b31d7c98c6b328c857"}}}

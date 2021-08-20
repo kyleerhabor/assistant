@@ -1,0 +1,6 @@
+{:commands [{:name "wikipedia"
+             :description "Search Wikipedia."
+             :options [{:type 3
+                        :name "query"
+                        :description "Search query."
+                        :required true}]}]}

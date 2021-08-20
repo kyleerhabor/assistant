@@ -1,10 +1,17 @@
 (ns assistant.events
-  (:require [discljord.formatting :refer [user-tag]]))
+  (:require [assistant.settings :refer [config]]
+            [discljord.formatting :refer [user-tag]]
+            [discljord.messaging :refer [bulk-overwrite-global-application-commands!]]))
 
 (defmulti handler
   "Handler for Discord API events."
-  (fn [type _] type))
+  (fn [_ type _] type))
+
+(defmethod handler :interaction-create
+  [msg-ch _ interaction])
 
 (defmethod handler :ready
-  [_ data]
-  (println (str "Connected as " (user-tag (:user data)) " (" (-> data :user :id) ").")))
+  [msg-ch _ data]
+  (let [id (-> data :user :id)]
+    (println (str "Connected as " (user-tag (:user data)) " (" id \)))
+    @(bulk-overwrite-global-application-commands! msg-ch id (:commands config))))
