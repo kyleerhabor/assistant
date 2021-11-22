@@ -5,7 +5,6 @@
             [assistant.settings :refer [secrets]]
             [discljord.connections :refer [connect-bot! disconnect-bot!]]
             [discljord.events :refer [message-pump!]]
-            [discljord.events.middleware :refer [ignore-bot-messages]]
             [discljord.messaging :refer [bulk-overwrite-global-application-commands!
                                          get-current-application-information!
                                          start-connection!
@@ -13,7 +12,7 @@
 
 (defn -main []
   (let [token (:token secrets)
-        event-ch (async/chan 128 ignore-bot-messages)
+        event-ch (async/chan 128)
         conn-ch (connect-bot! token event-ch
                               :intents #{})
         msg-ch (start-connection! token)]
