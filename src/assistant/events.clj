@@ -1,5 +1,7 @@
 (ns assistant.events
-  (:require [assistant.commands :as commands]
+  (:require [clojure.tools.logging :as log]
+            [assistant.commands :refer [commands]]
+            [discljord.events.middleware]
             [discljord.formatting :refer [user-tag]]))
 
 (defmulti handler
@@ -7,20 +9,15 @@
   (fn [_ type _] type))
 
 (defmethod handler :interaction-create
-  [msg-ch _ interaction]
-  (case (:type interaction)
-    2 (let [args (->> interaction
-                      :data
-                      :options
-                      (filter #(not (contains? % :options)))
-                      (map :value))]
-        (case (-> interaction :data :name)
-          "wikipedia" (apply commands/wikipedia msg-ch interaction args)))
-    nil))
+  [conn _ interaction]
+  (if (#{2 3} (:type interaction))
+    ;; Let's just assume the command exists. Nothing should go wrong, right?
+    ((:command (commands (keyword (:name (:data interaction))))) conn interaction)))
 
 (defmethod handler :ready
   [_ _ data]
-  (println (str "Connected as " (user-tag (:user data)) " (" (-> data :user :id) \))))
+  (log/info (str "Connected as " (user-tag (:user data))
+                 " (" (-> data :user :id) " | Shard: " (first (:shard data)) \))))
 
 (defmethod handler :default
   [_ _ _])

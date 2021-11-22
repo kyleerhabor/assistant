@@ -1,44 +1,49 @@
 (ns assistant.commands
-  (:require [clojure.string :refer [join]]
+  (:require [clojure.set :refer [rename-keys]]
+            [clojure.string :as str]
             [assistant.settings :refer [deps]]
             [clj-http.client :as client]
-            [discljord.formatting :refer [bold]]
+            [discljord.formatting :as fmt]
             [discljord.messaging :refer [create-interaction-response!]]
-            [discljord.messaging.specs :refer [interaction-response-types]]
+            [discljord.messaging.specs :refer [command-option-types interaction-response-types]]
             [hickory.core :as hick]
             [hickory.select :as sel]))
 
-(def wp-user-agent (str "AssistantBot/0.1.0"
-                        " (https://github.com/KyleErhabor/assistant; kyleerhabor@gmail.com)"
+(def wm-user-agent (str "AssistantBot/0.1.0 (https://github.com/KyleErhabor/assistant; kyleerhabor@gmail.com)"
                         " Clojure/" (clojure-version) ";"
-                        " clj-http/" (:mvn/version (get (:deps deps) 'clj-http/clj-http))))
+                        " clj-http/" (-> deps :deps ('clj-http/clj-http) :mvn/version)))
 
 (defn wp-snippet-content
-  "Converts HTML in an article snippet into Markdown."
+  "Converts HTML in an article snippet into Markdown. Currently only transforms `<span class=searchmatch ...>` into
+   `**...**`."
   [snippet]
-  (join (for [fragment (hick/parse-fragment snippet)]
-          (if (instance? org.jsoup.nodes.TextNode fragment)
-            (str fragment)
-            (->> fragment
-                 hick/as-hickory
-                 (sel/select (sel/child (sel/and (sel/tag :span)
-                                                 (sel/class :searchmatch))))
-                 first
-                 :content
-                 first
-                 bold)))))
+  (str/join (for [fragment (hick/parse-fragment snippet)]
+              (if (instance? org.jsoup.nodes.TextNode fragment)
+                (str fragment)
+                (->> fragment
+                     hick/as-hickory
+                     (sel/select (sel/child (sel/and (sel/tag :span)
+                                                     (sel/class :searchmatch))))
+                     first
+                     :content
+                     first
+                     fmt/bold)))))
 
-; Commands
-
-(defn wikipedia [msg-ch interaction query]
+(defn ^:command wikipedia
+  "Search Wikipedia."
+  {:options [{:type (:string command-option-types)
+              :name "query"
+              :description "The terms to search Wikipedia with."
+              :required true}]}
+  [conn interaction]
   (let [body (:body (client/get "https://en.wikipedia.org/w/api.php" {:as :json
-                                                                      :headers {:User-Agent wp-user-agent}
+                                                                      :headers {:User-Agent wm-user-agent}
                                                                       :query-params {:action "query"
                                                                                      :format "json"
                                                                                      :list "search"
-                                                                                     :srsearch query
+                                                                                     :srsearch (:value (first (:options (:data interaction))))
                                                                                      :srnamespace 0}}))]
-    @(create-interaction-response! msg-ch
+    @(create-interaction-response! conn
                                    (:id interaction)
                                    (:token interaction)
                                    (:channel-message-with-source interaction-response-types)
@@ -46,3 +51,18 @@
                                                     :fields (for [result (-> body :query :search)]
                                                               {:name (:title result)
                                                                :value (wp-snippet-content (:snippet result))})}]})))
+
+(def commands (reduce-kv (fn [m k v]
+                           (let [meta (meta v)]
+                             (if (:command meta)
+                               (assoc m (keyword k) (-> meta
+                                                        (select-keys [:autocomplete :channel-types :choices 
+                                                                      :default-permission :doc :max-value :min-value
+                                                                      :options :required :type])
+                                                        (rename-keys {:doc :description})
+                                                        (assoc :command v)))
+                               m))) {} (ns-publics *ns*)))
+
+(def discord-commands (vals (reduce-kv #(assoc %1 %2 (-> %3
+                                                         (assoc :name %2)
+                                                         (dissoc :command))) {} commands)))

@@ -1,3 +1,3 @@
 # Privacy Policy
 
-Assistant does not collect data or personal information.
+No data or personal information is collected by Assistant.
