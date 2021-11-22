@@ -2,7 +2,7 @@
 
 A Discord bot to assist my everyday needs.
 
-[Invite](https://discord.com/api/oauth2/authorize?client_id=856158596344709130&permissions=0&scope=bot%20applications.commands)
+[Invite (Private)](https://discord.com/api/oauth2/authorize?client_id=856158596344709130&permissions=0&scope=bot%20applications.commands)
 
 ## License
 
