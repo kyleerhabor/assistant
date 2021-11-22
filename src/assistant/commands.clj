@@ -63,6 +63,6 @@
                                                         (assoc :command v)))
                                m))) {} (ns-publics *ns*)))
 
-(def discord-commands (vals (reduce-kv #(assoc %1 %2 (-> %3
-                                                         (assoc :name %2)
-                                                         (dissoc :command))) {} commands)))
+(def discord-commands (reduce-kv #(conj %1 (-> %3
+                                               (assoc :name %2)
+                                               (dissoc :command))) [] commands))
