@@ -29,6 +29,29 @@
                      first
                      fmt/bold)))))
 
+(defn ^:command poll
+  "Creates a poll."
+  {:options [{:type (:string command-option-types)
+              :name "issue" ; Could also be called message, question, etc.
+              :description "The message to display."
+              :required true}]}
+  [conn interaction]
+  @(create-interaction-response! conn
+                                 (:id interaction)
+                                 (:token interaction)
+                                 (:channel-message-with-source interaction-response-types)
+                                 :data {:content (:value (first (:options (:data interaction))))
+                                        :components [{:type 1
+                                                      :components [{:type 3
+                                                                    :custom_id "poll-responses"
+                                                                    ;; TODO: Display the actual total.
+                                                                    :options [{:label "Yes"
+                                                                               :value "yes"
+                                                                               :description "0 votes"}
+                                                                              {:label "No"
+                                                                               :value "no"
+                                                                               :description "0 votes"}]}]}]}))
+
 (defn ^:command wikipedia
   "Search Wikipedia."
   {:options [{:type (:string command-option-types)
