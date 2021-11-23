@@ -3,3 +3,6 @@
 
 # Secret credentials
 secrets.edn
+
+# Database
+db/

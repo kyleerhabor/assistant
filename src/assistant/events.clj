@@ -9,7 +9,6 @@
 
 (defmethod handler :interaction-create
   [conn _ interaction]
-  (println interaction)
   (if (#{2 3} (:type interaction))
     (if-let [name (:name (or (:data interaction)
                              (:interaction (:message interaction))))]
