@@ -9,10 +9,9 @@
 
 (defmethod handler :interaction-create
   [conn _ interaction]
-  (if (#{2 3} (:type interaction))
+  (if (#{2 3 4} (:type interaction))
     (if-let [name (:name (or (:data interaction)
                              (:interaction (:message interaction))))]
-      ;; Let's just assume the command exists. Nothing should go wrong, right?))
       ((:command ((keyword name) commands)) conn interaction))))
 
 (defmethod handler :ready
