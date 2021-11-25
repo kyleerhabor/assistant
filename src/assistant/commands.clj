@@ -37,15 +37,6 @@
     (respond conn interaction (:channel-message-with-source interaction-response-types)
              :data {:content (ds.cdn/resize (ds.cdn/effective-user-avatar user) 4096)})))
 
-(defn ^:command server
-  "Gets information about the server."
-  [conn interaction]
-  (let [guild @(get-guild! conn (:guild-id interaction))]
-    (respond conn interaction (:channel-message-with-source interaction-response-types)
-             :data {:embeds [(clojure.tools.logging/spy :info {:title (:name guild)
-                              :thumbnail {:url (resize-image (ds.cdn/guild-icon guild))}
-                              :image {:url (resize-image (ds.cdn/guild-banner guild))}})]})))
-
 (defn ^:command purge
   "Deletes messages from a channel."
   {:options [{:type (:integer command-option-types)
@@ -70,6 +61,41 @@
                                  "Purge successful."
                                  "Purge failed."))
                              "Missing Manage Messages permission.")}))
+
+(defn ^:command server
+  "Gets information about the server."
+  [conn interaction]
+  (let [guild @(get-guild! conn (:guild-id interaction)
+                           :with-counts true)
+        afk (:afk-channel-id guild)]
+    (respond conn interaction (:channel-message-with-source interaction-response-types)
+             :data {:embeds [{:title (:name guild)
+                              :url (:vanity_url_code guild)
+                              :description (:description guild)
+                              :thumbnail {:url (resize-image (ds.cdn/guild-icon guild))}
+                              :image {:url (resize-image (ds.cdn/guild-banner guild))}
+                              :fields (cond-> [{:name "Owner"
+                                                :value (ds.fmt/mention-user (:owner-id guild))
+                                                :inline true}
+                                               {:name "Members"
+                                                :value (str "~" (:approximate-member-count guild))
+                                                :inline true}
+                                               {:name "Roles"
+                                                :value (count (:roles guild))
+                                                :inline true}
+                                               {:name "Emojis"
+                                                :value (count (:emojis guild))
+                                                :inline true}]
+                                        afk (conj {:name "AFK Channel"
+                                                   :value (let [mins (tick/minutes (tick/new-duration (:afk-timeout guild) :seconds))]
+                                                            (str (ds.fmt/mention-channel afk)
+                                                                 " ("
+                                                                 (if (= mins 60)
+                                                                   "1 hour"
+                                                                   (str mins " minute" (if-not (= mins 1) \s)))
+                                                                 \)))
+                                                   :inline true})
+                                        )}]})))
 
 (defn tagq
   "Searches for a tag by its name and the bound environment. `env` should be a map with a :guild or :user key."
