@@ -51,8 +51,9 @@
                              (let [amount (:value (first (:options (:data interaction))))]
                                (if @(bulk-delete-messages! conn
                                                            (:channel-id interaction)
-                                                           (transduce (comp (filter #(>= 14 (tick/days (tick/between (tick/instant (:timestamp %))
-                                                                                                                     (tick/instant)))))
+                                                           (transduce (comp (filter #(>= 14 (-> (tick/instant (:timestamp %))
+                                                                                                (tick/between (tick/instant))
+                                                                                                tick/days)))
                                                                             (filter (complement :pinned))
                                                                             (map :id))
                                                                       conj
@@ -70,7 +71,7 @@
         afk (:afk-channel-id guild)]
     (respond conn interaction (:channel-message-with-source interaction-response-types)
              :data {:embeds [{:title (:name guild)
-                              :url (:vanity_url_code guild)
+                              :url (:vanity-url-code guild)
                               :description (:description guild)
                               :thumbnail {:url (resize-image (ds.cdn/guild-icon guild))}
                               :image {:url (resize-image (ds.cdn/guild-banner guild))}
