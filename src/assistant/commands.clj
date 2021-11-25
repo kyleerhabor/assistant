@@ -5,10 +5,12 @@
             [assistant.settings :refer [deps]]
             [clj-http.client :as client]
             [discljord.formatting :as fmt]
-            [discljord.messaging :refer [create-interaction-response!]]
+            [discljord.messaging :refer [bulk-delete-messages! create-interaction-response! get-channel-messages!]]
             [discljord.messaging.specs :refer [command-option-types interaction-response-types]]
+            [discljord.permissions :as dp]
             [hickory.core :as hick]
             [hickory.select :as sel]
+            [tick.core :as tick]
             [xtdb.api :as xt]))
 
 (defn respond
@@ -16,25 +18,30 @@
   [conn interaction & args]
   (apply create-interaction-response! conn (:id interaction) (:token interaction) args))
 
-(defn ^:command poll
-  "Creates a poll."
-  {:options [{:type (:string command-option-types)
-              :name "issue"
-              :description "The message to display."
-              :required true}]}
+(defn ^:command purge
+  "Deletes messages from a channel."
+  {:options [{:type (:integer command-option-types)
+              :name "amount"
+              :description "The number of messages to delete."
+              :required true
+              :min_value 2
+              :max_value 100}]}
   [conn interaction]
   (respond conn interaction (:channel-message-with-source interaction-response-types)
-           :data {:content (:value (first (:options (:data interaction))))
-                  :components [{:type 1
-                                :components [{:type 3
-                                              :custom_id "poll-responses"
-                                              ;; TODO: Display the actual total.
-                                              :options [{:label "Yes"
-                                                         :value "yes"
-                                                         :description "0 votes"}
-                                                        {:label "No"
-                                                         :value "no"
-                                                         :description "0 votes"}]}]}]}))
+           :data {:content (if (dp/has-permission-flag? :manage-messages (:permissions (:member interaction)))
+                             (let [amount (:value (first (:options (:data interaction))))]
+                               (if @(bulk-delete-messages! conn
+                                                           (:channel-id interaction)
+                                                           (transduce (comp (filter #(>= 14 (tick/days (tick/between (tick/instant (:timestamp %))
+                                                                                                                     (tick/instant)))))
+                                                                            (filter (complement :pinned))
+                                                                            (map :id))
+                                                                      conj
+                                                                      @(get-channel-messages! conn (:channel-id interaction)
+                                                                                              :limit amount)))
+                                 "Purge successful."
+                                 "Purge failed."))
+                             "Missing Manage Messages permission.")}))
 
 (defn tagq
   "Searches for a tag by its name and the bound environment. `env` should be a map with a :guild or :user key."
@@ -150,24 +157,27 @@
                      fmt/bold)))))
 
 (defn ^:command wikipedia
-  "Search Wikipedia."
+  "Searches Wikipedia."
   {:options [{:type (:string command-option-types)
               :name "query"
-              :description "The terms to search Wikipedia with."
+              :description "The terms to search for."
               :required true}]}
   [conn interaction]
-  (let [body (:body (client/get "https://en.wikipedia.org/w/api.php" {:as :json
-                                                                      :headers {:User-Agent wm-user-agent}
-                                                                      :query-params {:action "query"
-                                                                                     :format "json"
-                                                                                     :list "search"
-                                                                                     :srsearch (:value (first (:options (:data interaction))))
-                                                                                     :srnamespace 0}}))]
-    (respond conn interaction (:channel-message-with-source interaction-response-types)
-             :data {:embeds [{:title "Results"
-                              :fields (for [result (-> body :query :search)]
-                                        {:name (:title result)
-                                         :value (wp-snippet-content (:snippet result))})}]})))
+  (respond conn interaction (:channel-message-with-source interaction-response-types)
+           :data {:embeds [{:title "Results"
+                            :fields (for [result (-> "https://en.wikipedia.org/w/api.php"
+                                                     (client/get {:as :json
+                                                                  :headers {:User-Agent wm-user-agent}
+                                                                  :query-params {:action "query"
+                                                                                 :format "json"
+                                                                                 :list "search"
+                                                                                 :srsearch (first (:options (:data interaction)))
+                                                                                 :srnamespace 0}})
+                                                     :body
+                                                     :query
+                                                     :search)]
+                                      {:name (:title result)
+                                       :value (wp-snippet-content (:snippet result))})}]}))
 
 (def commands (reduce-kv (fn [m k v]
                            (let [meta (meta v)]
