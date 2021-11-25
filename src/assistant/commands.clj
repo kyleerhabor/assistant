@@ -4,10 +4,12 @@
             [assistant.db :as db]
             [assistant.settings :refer [deps]]
             [clj-http.client :as client]
-            [discljord.formatting :as fmt]
-            [discljord.messaging :refer [bulk-delete-messages! create-interaction-response! get-channel-messages!]]
+            [discljord.cdn :as ds.cdn]
+            [discljord.formatting :as ds.fmt]
+            [discljord.messaging :refer [bulk-delete-messages! create-interaction-response! get-guild!
+                                         get-channel-messages!]]
             [discljord.messaging.specs :refer [command-option-types interaction-response-types]]
-            [discljord.permissions :as dp]
+            [discljord.permissions :as ds.p]
             [hickory.core :as hick]
             [hickory.select :as sel]
             [tick.core :as tick]
@@ -17,6 +19,32 @@
   "Responds to an interaction with the connection, ID, and token supplied."
   [conn interaction & args]
   (apply create-interaction-response! conn (:id interaction) (:token interaction) args))
+
+(defn resize-image
+  "Resizes an image if not `nil`."
+  [url]
+  (and url (ds.cdn/resize url 4096)))
+
+(defn ^:command avatar
+  "Gets a user's avatar."
+  {:options [{:type (:user command-option-types)
+              :name "user"
+              :description "The user to get the avatar of."
+              :required true}]}
+  [conn interaction]
+  (let [user (get (:users (:resolved (:data interaction)))
+                  (:value (first (:options (:data interaction)))))]
+    (respond conn interaction (:channel-message-with-source interaction-response-types)
+             :data {:content (ds.cdn/resize (ds.cdn/effective-user-avatar user) 4096)})))
+
+(defn ^:command server
+  "Gets information about the server."
+  [conn interaction]
+  (let [guild @(get-guild! conn (:guild-id interaction))]
+    (respond conn interaction (:channel-message-with-source interaction-response-types)
+             :data {:embeds [(clojure.tools.logging/spy :info {:title (:name guild)
+                              :thumbnail {:url (resize-image (ds.cdn/guild-icon guild))}
+                              :image {:url (resize-image (ds.cdn/guild-banner guild))}})]})))
 
 (defn ^:command purge
   "Deletes messages from a channel."
@@ -28,7 +56,7 @@
               :max_value 100}]}
   [conn interaction]
   (respond conn interaction (:channel-message-with-source interaction-response-types)
-           :data {:content (if (dp/has-permission-flag? :manage-messages (:permissions (:member interaction)))
+           :data {:content (if (ds.p/has-permission-flag? :manage-messages (:permissions (:member interaction)))
                              (let [amount (:value (first (:options (:data interaction))))]
                                (if @(bulk-delete-messages! conn
                                                            (:channel-id interaction)
@@ -61,8 +89,8 @@
                                              '{:find [?tag-name]
                                                :in [?name ?guild ?user]
                                                :where [[?e :tag/name ?tag-name]
-                                                       [(str/lower-case ?tag-name) ?lower-tag-name]
-                                                       [(str/includes? ?lower-tag-name ?name)]
+                                                       [(clojure.string/lower-case ?tag-name) ?lower-tag-name]
+                                                       [(clojure.string/includes? ?lower-tag-name ?name)]
                                                        (or (and [?e :tag/guild ?guild]
                                                                 [(any? ?user)])
                                                            (and [?e :tag/user ?user]
@@ -154,7 +182,7 @@
                      first
                      :content
                      first
-                     fmt/bold)))))
+                     ds.fmt/bold)))))
 
 (defn ^:command wikipedia
   "Searches Wikipedia."
