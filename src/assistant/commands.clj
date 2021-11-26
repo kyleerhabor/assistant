@@ -46,18 +46,24 @@
               :description "The number of messages to delete."
               :required true
               :min_value 2
-              :max_value 100}]}
+              :max_value 100}
+             {:type (:user command-option-types)
+              :name "user"
+              ;; Although the user may not be a member of the guild, they may have left messages in the channel.
+              :description "The user to delete messages from."}]}
   [conn interaction]
   (go
     (if (ds.p/has-permission-flag? :manage-messages (:permissions (:member interaction)))
-      (let [msgs (transduce (comp (filter #(>= 14 (-> (tick/instant (:timestamp %))
-                                                      (tick/between (tick/instant))
-                                                      tick/days)))
+      (let [amount (:value (first (:options (:data interaction))))
+            user (:value (second (:options (:data interaction))))
+            msgs (transduce (comp (filter #(>= 14 (tick/days (tick/between (tick/instant (:timestamp %))
+                                                                           (tick/instant)))))
                                   (filter (complement :pinned))
+                                  (filter #(or (nil? user) (= user (:id (:author %)))))
                                   (map :id))
                             conj
                             (<! (get-channel-messages! conn (:channel-id interaction)
-                                                       :limit (:value (first (:options (:data interaction)))))))]
+                                                       :limit amount)))]
         (when (<! (respond conn interaction (:channel-message-with-source interaction-response-types)
                            :data {:content (or (case (count msgs)
                                                  0 "No messages to purge."
