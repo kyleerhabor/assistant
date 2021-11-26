@@ -1,5 +1,5 @@
 (ns assistant.commands
-  (:require [clojure.core.async :as async :refer [>! <! go]]
+  (:require [clojure.core.async :refer [>! <! chan go timeout]]
             [clojure.edn :as edn]
             [clojure.set :refer [rename-keys]]
             [clojure.string :as str]
@@ -66,7 +66,7 @@
                                                  (if (<! (bulk-delete-messages! conn (:channel-id interaction) msgs))
                                                    "Purge successful."))
                                                "Purge failed.")}))
-          (<! (async/timeout 2000))
+          (<! (timeout 2000))
           (delete-original-interaction-response! conn (:application-id interaction) (:token interaction))))
       (respond conn interaction (:channel-message-with-source interaction-response-types)
                :data {:content "Missing Manage Messages permission."}))))
@@ -230,7 +230,7 @@
               :required true}]}
   [conn interaction]
   (go
-    (let [res (async/chan)]
+    (let [res (chan)]
       (client/get "https://en.wikipedia.org/w/api.php"
                   {:as :json
                    :async? true
