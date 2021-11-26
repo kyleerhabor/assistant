@@ -1,8 +1,8 @@
 # Classpath and runtime data (https://clojure.org/reference/deps_and_cli#_operation > Check cache)
 .cpcache/
 
-# Secret credentials
-secrets.edn
-
 # Database
 db/
+
+# Discord bot token.
+token.txt

@@ -1,6 +1,5 @@
 (ns assistant.core
   (:require [clojure.core.async :as async :refer [chan go]]
-            [clojure.edn :as edn]
             [clojure.tools.logging :as log]
             [assistant.commands :refer [discord-commands]]
             [assistant.events :refer [handler]]
@@ -9,9 +8,8 @@
             [discljord.messaging :refer [bulk-overwrite-global-application-commands!
                                          get-current-application-information! start-connection! stop-connection!]]))
 
-(defn -main []
-  (let [token (:token (edn/read-string (slurp "secrets.edn"))) ; I could simplify this.
-        event-ch (chan 128)
+(defn -main [[token]]
+  (let [event-ch (chan)
         conn-ch (connect-bot! token event-ch
                               :intents #{})
         msg-ch (start-connection! token)]
