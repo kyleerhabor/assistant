@@ -130,7 +130,9 @@
                                       (and [?e :tag/user ?user]
                                            [(any? ?guild)]))]} name (:guild env) (:user env)))
 
-(defn tag-autocomplete [conn interaction name env]
+(defn tag-autocomplete
+  "Handles tag autocompletion searching by name."
+  [conn interaction name env]
   (respond conn interaction 8
            :data {:choices (for [tag (xt/q (xt/db db/node)
                                            '{:find [?tag-name]
@@ -141,17 +143,22 @@
                                                      (or (and [?e :tag/guild ?guild]
                                                               [(any? ?user)])
                                                          (and [?e :tag/user ?user]
-                                                              [(any? ?guild)]))]}
+                                                              [(any? ?guild)]))]
+                                             :limit 25}
                                            (str/lower-case name) (:guild env) (:user env))
                                  :let [tag (first tag)]]
                              {:name tag
                               :value tag})}))
 
-(defn tag-env [interaction]
+(defn tag-env
+  "Formats an interaction suitable for a tag environment (guild > user)."
+  [interaction]
   {:guild (:guild-id interaction)
    :user (:id (:user interaction))})
 
-(defn tag-get [conn interaction]
+(defn tag-get
+  "Subcommand for retrieving a tag by name."
+  [conn interaction]
   (let [env (tag-env interaction)
         name (get-in interaction [:data :options 0 :options 0])]
     (if (:focused name)
@@ -162,7 +169,9 @@
                                   :description (:tag/content tag)}]}
                        {:content "Tag not found."})))))
 
-(defn tag-create [conn interaction]
+(defn tag-create
+  "Subcommand for creating a tag with a name and content."
+  [conn interaction]
   (let [env (tag-env interaction)
         options (get-in interaction [:data :options 0 :options])
         name (get-in options [0 :value])
@@ -177,7 +186,9 @@
                                                                             (:user env) (assoc :tag/user (:user env)))]])
                                    "Tag created."))})))
 
-(defn tag-delete [conn interaction]
+(defn tag-delete
+  "Subcommand for deleting a tag by name."
+  [conn interaction]
   (let [env (tag-env interaction)
         name (get-in interaction [:data :options 0 :options 0])]
     (if (:focused name)
@@ -189,7 +200,7 @@
                                  "Tag not found.")}))))
 
 (defn ^:command tag
-  "Facilities for pasting and managing message responses."
+  "Facilities for getting and managing message responses."
   {:options [{:type (:sub-command command-option-types)
               :name "get"
               :description "Displays a tag."
@@ -223,7 +234,9 @@
     "create" (tag-create conn interaction)
     "delete" (tag-delete conn interaction)))
 
-(def wm-user-agent (str "AssistantBot/0.1.0 (https://github.com/KyleErhabor/assistant; kyleerhabor@gmail.com)"
+(def wm-user-agent
+  "A user agent string conforming to the [Wikimedia User-Agent policy](https://meta.wikimedia.org/wiki/User-Agent_policy)."
+  (str "AssistantBot/0.1.0 (https://github.com/KyleErhabor/assistant; kyleerhabor@gmail.com)"
                         " Clojure/" (clojure-version) ";"
                         " clj-http/" (-> (edn/read-string (slurp "deps.edn"))
                                          :deps
@@ -272,17 +285,22 @@
                                           {:name (:title result)
                                            :value (wp-snippet-content (:snippet result))})}]}))))
 
-(def commands (reduce-kv (fn [m k v]
-                           (let [meta (meta v)]
-                             (if (:command meta)
-                               (assoc m (keyword k) (-> meta
-                                                        (select-keys [:autocomplete :channel-types :choices 
-                                                                      :default-permission :doc :max-value :min-value
-                                                                      :options :required :type])
-                                                        (rename-keys {:doc :description})
-                                                        (assoc :command v)))
-                               m))) {} (ns-publics *ns*)))
+(def commands
+  "A map of keywordized command names to command details conforming to the [Create Global Application Command](https://discord.com/developers/docs/interactions/application-commands#create-global-application-command) endpoint."
+  (reduce-kv (fn [m k v]
+               (let [meta (meta v)]
+                 (if (:command meta)
+                   (assoc m (keyword k) (-> meta
+                                            (select-keys [:autocomplete :channel-types :choices
+                                                          :default-permission :doc :max-value :min-value
+                                                          :options :required :type])
+                                            (rename-keys {:doc :description})
+                                            (assoc :command v)))
+                   m))) {} (ns-publics *ns*)))
 
-(def discord-commands (reduce-kv #(conj %1 (-> %3
-                                               (assoc :name %2)
-                                               (dissoc :command))) [] commands))
+(def discord-commands
+  "A vector of command maps conforming to the [Bulk Overwrite Global Application Commands](https://discord.com/developers/docs/interactions/application-commands#bulk-overwrite-global-application-commands)
+   endpoint."
+  (reduce-kv #(conj %1 (-> %3
+                           (assoc :name %2)
+                           (dissoc :command))) [] commands))
