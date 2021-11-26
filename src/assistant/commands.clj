@@ -1,5 +1,5 @@
 (ns assistant.commands
-  (:require [clojure.core.async :refer [<! go]]
+  (:require [clojure.core.async :as async :refer [<! go]]
             [clojure.set :refer [rename-keys]]
             [clojure.string :as str]
             [assistant.db :as db]
