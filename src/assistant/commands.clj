@@ -286,7 +286,8 @@
                                            :value (wp-snippet-content (:snippet result))})}]}))))
 
 (def commands
-  "A map of keywordized command names to command details conforming to the [Create Global Application Command](https://discord.com/developers/docs/interactions/application-commands#create-global-application-command) endpoint."
+  "A map of keywordized command names to command details conforming to the [Create Global Application Command](https://discord.com/developers/docs/interactions/application-commands#create-global-application-command)
+   endpoint."
   (reduce-kv (fn [m k v]
                (let [meta (meta v)]
                  (if (:command meta)
