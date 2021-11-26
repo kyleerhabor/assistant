@@ -183,7 +183,7 @@
                         :data {:content (if (seq (tagq (:value name) {:guild guild
                                                                       :user user}))
                                           "Tag already exists."
-                                          (do (xt/submit-tx db/node [[::xt/put (cond-> {:xt/id (db/id)
+                                          (do (xt/submit-tx-async db/node [[::xt/put (cond-> {:xt/id (db/id)
                                                                                         :tag/name (:value name)
                                                                                         :tag/content (:value content)}
                                                                                  guild (assoc :tag/guild guild)
@@ -195,7 +195,7 @@
                  (respond conn interaction (:channel-message-with-source interaction-response-types)
                           :data {:content (if-let [tag (first (first (tagq (:value name) {:guild guild
                                                                                           :user user})))]
-                                            (do (xt/submit-tx db/node [[::xt/delete (:xt/id tag)]])
+                                            (do (xt/submit-tx-async db/node [[::xt/delete (:xt/id tag)]])
                                                 "Tag deleted.")
                                             "Tag not found.")})))))
 
