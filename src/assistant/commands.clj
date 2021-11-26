@@ -140,8 +140,49 @@
                              {:name tag
                               :value tag})}))
 
+(defn tag-env [interaction]
+  {:guild (:guild-id interaction)
+   :user (:id (:user interaction))})
+
+(defn tag-get [conn interaction]
+  (let [env (tag-env interaction)
+        name (get-in interaction [:data :options 0 :options 0])]
+    (if (:focused name)
+      (tag-autocomplete conn interaction (:value name) env)
+      (respond conn interaction (:channel-message-with-source interaction-response-types)
+               :data (if-let [tag (first (first (tagq (:value name) env)))]
+                       {:embeds [{:title (:tag/name tag)
+                                  :description (:tag/content tag)}]}
+                       {:content "Tag not found."})))))
+
+(defn tag-create [conn interaction]
+  (let [env (tag-env interaction)
+        options (get-in interaction [:data :options 0 :options])
+        name (get-in options [0 :value])
+        content (get-in options [1 :value])]
+    (respond conn interaction (:channel-message-with-source interaction-response-types)
+             :data {:content (if (seq (tagq name (tag-env interaction)))
+                               "Tag already exists."
+                               (do (xt/submit-tx-async db/node [[::xt/put (cond-> {:xt/id (db/id)
+                                                                                   :tag/name name
+                                                                                   :tag/content content}
+                                                                            (:guild env) (assoc :tag/guild (:guild env))
+                                                                            (:user env) (assoc :tag/user (:user env)))]])
+                                   "Tag created."))})))
+
+(defn tag-delete [conn interaction]
+  (let [env (tag-env interaction)
+        name (get-in interaction [:data :options 0 :options 0])]
+    (if (:focused name)
+      (tag-autocomplete conn interaction (:value name) env)
+      (respond conn interaction (:channel-message-with-source interaction-response-types)
+               :data {:content (if-let [tag (first (first (tagq (:value name) env)))]
+                                 (do (xt/submit-tx-async db/node [[::xt/delete (:xt/id tag)]])
+                                     "Tag deleted.")
+                                 "Tag not found.")}))))
+
 (defn ^:command tag
-  "Tag facilities for pasting and managing common responses."
+  "Facilities for pasting and managing message responses."
   {:options [{:type (:sub-command command-option-types)
               :name "get"
               :description "Displays a tag."
@@ -170,40 +211,10 @@
                          :required true
                          :autocomplete true}]}]}
   [conn interaction]
-  (let [subcommand (first (:options (:data interaction)))
-        guild (:guild-id interaction)
-        user (:id (:user interaction))
-        name (first (:options subcommand))
-        content (second (:options subcommand))]
-    (case (:name subcommand)
-      "get" (if (:focused name)
-              (tag-autocomplete conn interaction (:value name) {:guild guild
-                                                                :user user})
-              (respond conn interaction (:channel-message-with-source interaction-response-types)
-                       :data (if-let [tag (first (first (tagq (:value name) {:guild guild
-                                                                             :user user})))]
-                               {:embeds [{:title (:tag/name tag)
-                                          :description (:tag/content tag)}]}
-                               {:content "Tag not found."})))
-      "create" (respond conn interaction (:channel-message-with-source interaction-response-types)
-                        :data {:content (if (seq (tagq (:value name) {:guild guild
-                                                                      :user user}))
-                                          "Tag already exists."
-                                          (do (xt/submit-tx-async db/node [[::xt/put (cond-> {:xt/id (db/id)
-                                                                                        :tag/name (:value name)
-                                                                                        :tag/content (:value content)}
-                                                                                 guild (assoc :tag/guild guild)
-                                                                                 user (assoc :tag/user user))]])
-                                              "Tag created."))})
-      "delete" (if (:focused name)
-                 (tag-autocomplete conn interaction (:value name) {:guild guild
-                                                                   :user user})
-                 (respond conn interaction (:channel-message-with-source interaction-response-types)
-                          :data {:content (if-let [tag (first (first (tagq (:value name) {:guild guild
-                                                                                          :user user})))]
-                                            (do (xt/submit-tx-async db/node [[::xt/delete (:xt/id tag)]])
-                                                "Tag deleted.")
-                                            "Tag not found.")})))))
+  (case (get-in interaction [:data :options 0 :name])
+    "get" (tag-get conn interaction)
+    "create" (tag-create conn interaction)
+    "delete" (tag-delete conn interaction)))
 
 (def wm-user-agent (str "AssistantBot/0.1.0 (https://github.com/KyleErhabor/assistant; kyleerhabor@gmail.com)"
                         " Clojure/" (clojure-version) ";"
