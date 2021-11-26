@@ -8,7 +8,8 @@
             [discljord.cdn :as ds.cdn]
             [discljord.formatting :as ds.fmt]
             [discljord.messaging :refer [bulk-delete-messages! create-interaction-response!
-                                         delete-original-interaction-response! get-guild! get-channel-messages!]]
+                                         delete-message! delete-original-interaction-response! get-guild!
+                                         get-channel-messages!]]
             [discljord.messaging.specs :refer [command-option-types interaction-response-types]]
             [discljord.permissions :as ds.p]
             [hickory.core :as hick]
@@ -49,20 +50,22 @@
   [conn interaction]
   (go
     (if (ds.p/has-permission-flag? :manage-messages (:permissions (:member interaction)))
-      (let [amount (:value (first (:options (:data interaction))))]
+      (let [msgs (transduce (comp (filter #(>= 14 (-> (tick/instant (:timestamp %))
+                                                      (tick/between (tick/instant))
+                                                      tick/days)))
+                                  (filter (complement :pinned))
+                                  (map :id))
+                            conj
+                            (<! (get-channel-messages! conn (:channel-id interaction)
+                                                       :limit (:value (first (:options (:data interaction)))))))]
         (when (<! (respond conn interaction (:channel-message-with-source interaction-response-types)
-                           :data {:content (if (<! (bulk-delete-messages! conn
-                                                                          (:channel-id interaction)
-                                                                          (transduce (comp (filter #(>= 14 (-> (tick/instant (:timestamp %))
-                                                                                                               (tick/between (tick/instant))
-                                                                                                               tick/days)))
-                                                                                           (filter (complement :pinned))
-                                                                                           (map :id))
-                                                                                     conj
-                                                                                     (<! (get-channel-messages! conn (:channel-id interaction)
-                                                                                                                :limit amount)))))
-                                             "Purge successful."
-                                             "Purge failed.")}))
+                           :data {:content (or (case (count msgs)
+                                                 0 "No messages to purge."
+                                                 1 (if (<! (delete-message! conn (:channel-id interaction) (first msgs)))
+                                                     "Deleted one message.")
+                                                 (if (<! (bulk-delete-messages! conn (:channel-id interaction) msgs))
+                                                   "Purge successful."))
+                                               "Purge failed.")}))
           (<! (async/timeout 2000))
           (delete-original-interaction-response! conn (:application-id interaction) (:token interaction))))
       (respond conn interaction (:channel-message-with-source interaction-response-types)
