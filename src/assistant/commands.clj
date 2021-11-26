@@ -68,18 +68,6 @@
       (respond conn interaction (:channel-message-with-source interaction-response-types)
                :data {:content "Missing Manage Messages permission."}))))
 
-(defn ^:command role
-  "Gets information about a role."
-  {:options [{:type (:role command-option-types)
-              :name "role"
-              :description "The role to get information about."
-              :required true}]}
-  [conn interaction]
-  (respond conn interaction (:channel-message-with-source interaction-response-types)
-           :data {:embeds [(let [role (get (:roles (:resolved (:data interaction)))
-                                           (:value (first (:options (:data interaction)))))]
-                             {:title (:name role)})]}))
-
 (defn ^:command server
   "Gets information about the server."
   [conn interaction]
