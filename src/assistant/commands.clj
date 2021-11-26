@@ -1,4 +1,11 @@
 (ns assistant.commands
+  "Command facilities for Assistant.
+   
+   Commands are declared as functions with :command set as metadata. The function name, documentation, and metadata is
+   used to extract the data about a command to the `commands` and `discord-commands` vars. There's no special handling
+   for subcommands or subcommand groups. Conventionally, they're declared as regular functions following the format
+   command-group-subcommand. If the subcommand doesn't have a group, it should be excluded from the name. For example,
+   `tag-get` rather than `tag-?-get`."
   (:require [clojure.core.async :refer [>! <! chan go timeout]]
             [clojure.edn :as edn]
             [clojure.set :refer [rename-keys]]
