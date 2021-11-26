@@ -8,7 +8,7 @@
             [discljord.messaging :refer [bulk-overwrite-global-application-commands!
                                          get-current-application-information! start-connection! stop-connection!]]))
 
-(defn -main [[token]]
+(defn -main [& [token]]
   (let [event-ch (chan)
         conn-ch (connect-bot! token event-ch
                               :intents #{})
