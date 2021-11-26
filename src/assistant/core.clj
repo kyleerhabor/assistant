@@ -1,5 +1,5 @@
 (ns assistant.core
-  (:require [clojure.core.async :as async]
+  (:require [clojure.core.async :as async :refer [go]]
             [clojure.tools.logging :as log]
             [assistant.commands :refer [discord-commands]]
             [assistant.events :refer [handler]]
@@ -19,7 +19,7 @@
               @(bulk-overwrite-global-application-commands! msg-ch
                                                             (:id @(get-current-application-information! msg-ch))
                                                             discord-commands))
-    (message-pump! event-ch (partial handler msg-ch))
+    (message-pump! event-ch #(go (handler msg-ch %1 %2)))
     (stop-connection! msg-ch)
     (disconnect-bot! conn-ch)
     (async/close! event-ch)))

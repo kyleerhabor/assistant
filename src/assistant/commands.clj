@@ -1,13 +1,14 @@
 (ns assistant.commands
-  (:require [clojure.set :refer [rename-keys]]
+  (:require [clojure.core.async :refer [<! go]]
+            [clojure.set :refer [rename-keys]]
             [clojure.string :as str]
             [assistant.db :as db]
             [assistant.settings :refer [deps]]
             [clj-http.client :as client]
             [discljord.cdn :as ds.cdn]
             [discljord.formatting :as ds.fmt]
-            [discljord.messaging :refer [bulk-delete-messages! create-interaction-response! get-guild!
-                                         get-channel-messages!]]
+            [discljord.messaging :refer [bulk-delete-messages! create-interaction-response!
+                                         delete-original-interaction-response! get-guild! get-channel-messages!]]
             [discljord.messaging.specs :refer [command-option-types interaction-response-types]]
             [discljord.permissions :as ds.p]
             [hickory.core :as hick]
@@ -46,57 +47,73 @@
               :min_value 2
               :max_value 100}]}
   [conn interaction]
+  (go
+    (if (ds.p/has-permission-flag? :manage-messages (:permissions (:member interaction)))
+      (let [amount (:value (first (:options (:data interaction))))]
+        (when (<! (respond conn interaction (:channel-message-with-source interaction-response-types)
+                           :data {:content (if (<! (bulk-delete-messages! conn
+                                                                          (:channel-id interaction)
+                                                                          (transduce (comp (filter #(>= 14 (-> (tick/instant (:timestamp %))
+                                                                                                               (tick/between (tick/instant))
+                                                                                                               tick/days)))
+                                                                                           (filter (complement :pinned))
+                                                                                           (map :id))
+                                                                                     conj
+                                                                                     (<! (get-channel-messages! conn (:channel-id interaction)
+                                                                                                                :limit amount)))))
+                                             "Purge successful."
+                                             "Purge failed.")}))
+          (<! (async/timeout 2000))
+          (delete-original-interaction-response! conn (:application-id interaction) (:token interaction))))
+      (respond conn interaction (:channel-message-with-source interaction-response-types)
+               :data {:content "Missing Manage Messages permission."}))))
+
+(defn ^:command role
+  "Gets information about a role."
+  {:options [{:type (:role command-option-types)
+              :name "role"
+              :description "The role to get information about."
+              :required true}]}
+  [conn interaction]
   (respond conn interaction (:channel-message-with-source interaction-response-types)
-           :data {:content (if (ds.p/has-permission-flag? :manage-messages (:permissions (:member interaction)))
-                             (let [amount (:value (first (:options (:data interaction))))]
-                               (if @(bulk-delete-messages! conn
-                                                           (:channel-id interaction)
-                                                           (transduce (comp (filter #(>= 14 (-> (tick/instant (:timestamp %))
-                                                                                                (tick/between (tick/instant))
-                                                                                                tick/days)))
-                                                                            (filter (complement :pinned))
-                                                                            (map :id))
-                                                                      conj
-                                                                      @(get-channel-messages! conn (:channel-id interaction)
-                                                                                              :limit amount)))
-                                 "Purge successful."
-                                 "Purge failed."))
-                             "Missing Manage Messages permission.")}))
+           :data {:embeds [(let [role (get (:roles (:resolved (:data interaction)))
+                                           (:value (first (:options (:data interaction)))))]
+                             {:title (:name role)})]}))
 
 (defn ^:command server
   "Gets information about the server."
   [conn interaction]
-  (let [guild @(get-guild! conn (:guild-id interaction)
-                           :with-counts true)
-        afk (:afk-channel-id guild)]
+  (go
     (respond conn interaction (:channel-message-with-source interaction-response-types)
-             :data {:embeds [{:title (:name guild)
-                              :url (:vanity-url-code guild)
-                              :description (:description guild)
-                              :thumbnail {:url (resize-image (ds.cdn/guild-icon guild))}
-                              :image {:url (resize-image (ds.cdn/guild-banner guild))}
-                              :fields (cond-> [{:name "Owner"
-                                                :value (ds.fmt/mention-user (:owner-id guild))
-                                                :inline true}
-                                               {:name "Members"
-                                                :value (str "~" (:approximate-member-count guild))
-                                                :inline true}
-                                               {:name "Roles"
-                                                :value (count (:roles guild))
-                                                :inline true}
-                                               {:name "Emojis"
-                                                :value (count (:emojis guild))
-                                                :inline true}]
-                                        afk (conj {:name "AFK Channel"
-                                                   :value (let [mins (tick/minutes (tick/new-duration (:afk-timeout guild) :seconds))]
-                                                            (str (ds.fmt/mention-channel afk)
-                                                                 " ("
-                                                                 (if (= mins 60)
-                                                                   "1 hour"
-                                                                   (str mins " minute" (if-not (= mins 1) \s)))
-                                                                 \)))
-                                                   :inline true})
-                                        )}]})))
+             :data {:embeds [(let [guild (<! (get-guild! conn (:guild-id interaction)
+                                                         :with-counts true))
+                                   afk (:afk-channel-id guild)]
+                               {:title (:name guild)
+                                :url (:vanity-url-code guild)
+                                :description (:description guild)
+                                :thumbnail {:url (resize-image (ds.cdn/guild-icon guild))}
+                                :image {:url (resize-image (ds.cdn/guild-banner guild))}
+                                :fields (cond-> [{:name "Owner"
+                                                  :value (ds.fmt/mention-user (:owner-id guild))
+                                                  :inline true}
+                                                 {:name "Members"
+                                                  :value (str "~" (:approximate-member-count guild))
+                                                  :inline true}
+                                                 {:name "Roles"
+                                                  :value (count (:roles guild))
+                                                  :inline true}
+                                                 {:name "Emojis"
+                                                  :value (count (:emojis guild))
+                                                  :inline true}]
+                                          afk (conj {:name "AFK Channel"
+                                                     :value (let [mins (tick/minutes (tick/new-duration (:afk-timeout guild) :seconds))]
+                                                              (str (ds.fmt/mention-channel afk)
+                                                                   " ("
+                                                                   (if (= mins 60)
+                                                                     "1 hour"
+                                                                     (str mins " minute" (if-not (= mins 1) \s)))
+                                                                   \)))
+                                                     :inline true}))})]})))
 
 (defn tagq
   "Searches for a tag by its name and the bound environment. `env` should be a map with a :guild or :user key."
