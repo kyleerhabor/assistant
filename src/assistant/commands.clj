@@ -1,5 +1,5 @@
 (ns assistant.commands
-  (:require [clojure.core.async :as async :refer [<! go]]
+  (:require [clojure.core.async :as async :refer [>! <! go]]
             [clojure.set :refer [rename-keys]]
             [clojure.string :as str]
             [assistant.db :as db]
@@ -116,17 +116,17 @@
 
 (defn tag-autocomplete [conn interaction name env]
   (respond conn interaction 8
-           :data {:choices (for [tag (let [name (str/lower-case name)]
-                                       (xt/q (xt/db db/node)
-                                             '{:find [?tag-name]
-                                               :in [?name ?guild ?user]
-                                               :where [[?e :tag/name ?tag-name]
-                                                       [(clojure.string/lower-case ?tag-name) ?lower-tag-name]
-                                                       [(clojure.string/includes? ?lower-tag-name ?name)]
-                                                       (or (and [?e :tag/guild ?guild]
-                                                                [(any? ?user)])
-                                                           (and [?e :tag/user ?user]
-                                                                [(any? ?guild)]))]} name (:guild env) (:user env)))
+           :data {:choices (for [tag (xt/q (xt/db db/node)
+                                           '{:find [?tag-name]
+                                             :in [?name ?guild ?user]
+                                             :where [[?e :tag/name ?tag-name]
+                                                     [(clojure.string/lower-case ?tag-name) ?lower-tag-name]
+                                                     [(clojure.string/includes? ?lower-tag-name ?name)]
+                                                     (or (and [?e :tag/guild ?guild]
+                                                              [(any? ?user)])
+                                                         (and [?e :tag/user ?user]
+                                                              [(any? ?guild)]))]}
+                                           (str/lower-case name) (:guild env) (:user env))
                                  :let [tag (first tag)]]
                              {:name tag
                               :value tag})}))
@@ -223,21 +223,24 @@
               :description "The terms to search for."
               :required true}]}
   [conn interaction]
-  (respond conn interaction (:channel-message-with-source interaction-response-types)
-           :data {:embeds [{:title "Results"
-                            :fields (for [result (-> "https://en.wikipedia.org/w/api.php"
-                                                     (client/get {:as :json
-                                                                  :headers {:User-Agent wm-user-agent}
-                                                                  :query-params {:action "query"
-                                                                                 :format "json"
-                                                                                 :list "search"
-                                                                                 :srsearch (first (:options (:data interaction)))
-                                                                                 :srnamespace 0}})
-                                                     :body
-                                                     :query
-                                                     :search)]
-                                      {:name (:title result)
-                                       :value (wp-snippet-content (:snippet result))})}]}))
+  (go
+    (let [res (async/chan)]
+      (client/get "https://en.wikipedia.org/w/api.php"
+                  {:as :json
+                   :async? true
+                   :headers {:User-Agent wm-user-agent}
+                   :query-params {:action "query"
+                                  :format "json"
+                                  :list "search"
+                                  :srsearch (:value (first (:options (:data interaction))))
+                                  :srnamespace 0}}
+                  #(go (>! res %))
+                  (constantly nil))
+      (respond conn interaction (:channel-message-with-source interaction-response-types)
+               :data {:embeds [{:title "Results"
+                                :fields (for [result (:search (:query (:body (<! res))))]
+                                          {:name (:title result)
+                                           :value (wp-snippet-content (:snippet result))})}]}))))
 
 (def commands (reduce-kv (fn [m k v]
                            (let [meta (meta v)]
