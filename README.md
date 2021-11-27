@@ -10,10 +10,10 @@ A Discord bot to assist my everyday needs.
 
 The Discord bot space is oversaturated—why another one?
 
-Discord bots are cool. Before application commands, a bot would read sent messages, validate and conform it, and run a
-command the bot defined. However, there was no formally standardized way to issue or develop commands. While bots were
-flexible, the lack of a system breeded individualism, requiring them to adopt their own prefixes (for conflict
-resolution against other bots), help commands, syntax, and niches for users to comprehend.
+Discord bots are cool. Before application commands, a bot would read, validate, conform, and process messages as they 
+were sent. It was very flexible, but lacked a standardized way to issue. While many bots adopted the same principles,
+the lack of a system breeded individualism, requiring them to adopt their own prefixes, syntaxes, help commands, and
+niches for users to comprehend. Consequently, users are forced to learn each bot's language and vocabulary.
 
 With application commands, many bots are migrating their traditional commands to use interactions, but are
 retaining gimmicks and complexity that places burden on the user. For example, an `/avatar` command may display a 
