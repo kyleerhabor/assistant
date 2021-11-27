@@ -4,6 +4,22 @@ A Discord bot to assist my everyday needs.
 
 [Invite (Private)](https://discord.com/api/oauth2/authorize?client_id=856158596344709130&permissions=8192&scope=applications.commands%20bot)
 
+## Installing
+
+[Clojure](https://clojure.org/guides/getting_started) is required to build Assistant. After Clojure has been installed,
+[download the project](https://github.com/KyleErhabor/assistant/releases/latest) and run `clj -T:build uber` to build
+it. This may take a while to complete (e.g. a minute).
+
+### Running
+
+In the top-level directory of the project, run:
+```
+java -jar target/assistant-<version>-standalone.jar <token>
+```
+
+`<version>` must be the version of the project built, which can be found in the `target` directory. `<token>` must be
+the [Discord bot token](https://discord.com/developers/applications) to authenticate with.
+
 ## License
 
 Copyright © 2021 Kyle Erhabor
