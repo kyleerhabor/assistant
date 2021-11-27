@@ -13,7 +13,7 @@ it. This may take a while to complete (e.g. a minute).
 ### Running
 
 In the top-level directory of the project, run:
-```
+```sh
 java -jar target/assistant-<version>-standalone.jar <token>
 ```
 
