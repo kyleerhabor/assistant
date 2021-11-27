@@ -27,7 +27,7 @@ among bots of all sizes.
 I wanted a bot capable of providing a simple interface and experience, but couldn't find one I liked. In protest,
 Assistant was created to address those issues—first class support for application commands (subcommands, groups, typed
 parameters, autocompletion, etc.) while only showing the details that matter. Assistant's principles are based on what
-makes traditional commands and interactions appealing to users and I hope you enjoy them.
+makes traditional commands and interactions appealing to users and developers and I hope you its design philosophy.
 
 *- Klay#7753*
 
