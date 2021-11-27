@@ -32,19 +32,27 @@ makes traditional commands and interactions appealing to users and I hope you en
 
 ## Installing
 
-[Clojure](https://clojure.org/guides/getting_started) is required to build Assistant. After Clojure has been installed,
-[download the project](https://github.com/KyleErhabor/assistant/releases/latest) and run `clj -T:build uber` to build
-it. This may take a while to complete (e.g. a minute).
+You can download the project from the [Releases](https://github.com/KyleErhabor/assistant/releases/latest) page.
+[Clojure](https://clojure.org/guides/getting_started) is required to build it. In the examples, the commands should be 
+run in the top-level directory of the project. `<token>` refers to the [Discord bot token](https://discord.com/developers/applications) the bot will use to authenticate.
 
-### Running
+### Clojure
 
-In the top-level directory of the project, run:
+If you'd prefer to use Clojure directly, you can run the following command:
+
+```sh
+clojure -M -m assistant.core <token>
+```
+
+### Java
+
+Run `clj -T:build uber` build the project. This may take a while to complete (e.g. a minute). Once finished, run the
+following command to start the bot:
 ```sh
 java -jar target/assistant-<version>-standalone.jar <token>
 ```
 
-`<version>` must be the version of the project built, which can be found in the `target` directory. `<token>` must be
-the [Discord bot token](https://discord.com/developers/applications) to authenticate with.
+`<version>` must be the version of the project built, which can be found in the `target` directory.
 
 ## License
 
