@@ -8,7 +8,7 @@ A Discord bot to assist my everyday needs.
 
 ## Rationale
 
-The Discord bot space is over-saturated—why another one?
+The Discord bot space is oversaturated—why another one?
 
 Discord bots are cool. Before application commands, a bot would read sent messages, validate and conform it, and run a
 command the bot defined. However, there was no formally standardized way to issue or develop commands. While bots were
