@@ -12,9 +12,7 @@ The Discord bot space is oversaturated—why another one?
 
 Discord bots are cool. Before application commands, a bot would read, validate, conform, and process messages as they 
 were sent. It was very flexible, but lacked a standardized way to issue commands. While many bots adopted the same
-principles, the lack of a system breeded individualism, requiring them to adopt prefixes, syntaxes, help commands, and
-niches slightly differing between between one another. Consequently, users were forced to learn each bot's language and
-vocabulary.
+principles, the lack of a system breeded individualism, resulting in prefixes, syntaxes, help commands, and niches differing between one another. Consequently, users were forced to learn each bot's language and vocabulary.
 
 With application commands, many bots migrated their traditional commands to use interactions, but retained the gimmicks 
 and complexities of their former implementations. For example, an `/avatar` command may display a user's avatar with 
