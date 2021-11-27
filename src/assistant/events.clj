@@ -12,12 +12,12 @@
   (if (#{2 3 4} (:type interaction))
     (if-let [name (:name (or (:data interaction)
                              (:interaction (:message interaction))))]
-      ((:command ((keyword name) commands)) conn interaction))))
+      ((:fn ((keyword name) commands)) conn interaction))))
 
 (defmethod handler :ready
   [_ _ data]
   (log/info (str "Connected as " (fmt/user-tag (:user data))
-                 " (" (:id (:user data)) " | Shard: " (first (:shard data)) \))))
+                 " (" (-> data :user :id) " | Shard: " (first (:shard data)) \))))
 
 (defmethod handler :default
   [_ _ _])

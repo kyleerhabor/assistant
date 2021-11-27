@@ -1,9 +1,9 @@
 (ns assistant.commands
   "Command facilities for Assistant.
    
-   Commands are declared as functions with :command set as metadata. The function name, documentation, and metadata is
-   used to extract the data about a command to the `commands` and `discord-commands` vars. There's no special handling
-   for subcommands or subcommand groups. Conventionally, they're declared as regular functions following the format
+   Commands are declared as functions with ^:command. The function name, documentation, and metadata is used to extract
+   the data about a command to the `commands` and `discord-commands` vars. There's no special handling for subcommands
+   or subcommand groups. Conventionally, they're declared as regular functions following the format 
    command-group-subcommand. If the subcommand doesn't have a group, it should be excluded from the name. For example,
    `tag-get` rather than `tag-?-get`."
   (:require [clojure.core.async :refer [>! <! chan go timeout]]
@@ -34,6 +34,31 @@
   [url]
   (and url (ds.cdn/resize url 4096)))
 
+(defn option->option
+  "Converts an [Interaction Data](https://discord.com/developers/docs/interactions/receiving-and-responding#interaction-object-interaction-data-structure)
+   or an [Application Command Interaction Data Option](https://discord.com/developers/docs/interactions/application-commands#application-command-object-application-command-interaction-data-option-structure)
+   to an Application Command Interaction Data Option."
+  [option pos]
+  (get (:options option) pos))
+
+(defn interaction->option
+  "Converts an [Interaction](https://discord.com/developers/docs/interactions/receiving-and-responding#interaction-object-interaction-structure)
+   to an [Application Command Interaction Data Option](https://discord.com/developers/docs/interactions/application-commands#application-command-object-application-command-interaction-data-option-structure)."
+  [interaction pos]
+  (option->option (:data interaction) pos))
+
+(defn interaction->value
+  "Converts an [Interaction](https://discord.com/developers/docs/interactions/receiving-and-responding#interaction-object-interaction-structure)
+   to the value of an [Application Command Interaction Data Option](https://discord.com/developers/docs/interactions/application-commands#application-command-object-application-command-interaction-data-option-structure)."
+  [interaction pos]
+  (:value (interaction->option interaction pos)))
+
+(defn interaction->name
+  "Converts an [Interaction](https://discord.com/developers/docs/interactions/receiving-and-responding#interaction-object-interaction-structure)
+   to the name of an [Application Command Interaction Data Option](https://discord.com/developers/docs/interactions/application-commands#application-command-object-application-command-interaction-data-option-structure)."
+  [interaction pos]
+  (:name (interaction->option interaction pos)))
+
 (defn ^:command avatar
   "Gets a user's avatar."
   {:options [{:type (:user command-option-types)
@@ -42,13 +67,13 @@
               :required true}
              {:type (:integer command-option-types)
               :name "size"
-              :description "The size of the avatar."
+              :description "The maximum size of the avatar."
               :choices (map #(identity {:name (str %)
                                         :value %}) [16 32 64 128 256 512 1024 2048 4096])}]}
   [conn interaction]
   (let [user (get (:users (:resolved (:data interaction)))
-                  (:value (first (:options (:data interaction)))))
-        size (or (:value (second (:options (:data interaction)))) 4096)]
+                  (interaction->value interaction 0))
+        size (or (interaction->value interaction 1) 4096)]
     (respond conn interaction (:channel-message-with-source interaction-response-types)
              :data {:content (ds.cdn/resize (ds.cdn/effective-user-avatar user) size)})))
 
@@ -67,8 +92,8 @@
   [conn interaction]
   (go
     (if (ds.p/has-permission-flag? :manage-messages (:permissions (:member interaction)))
-      (let [amount (:value (first (:options (:data interaction))))
-            user (:value (second (:options (:data interaction))))
+      (let [amount (interaction->value interaction 0)
+            user (interaction->value interaction 1)
             msgs (transduce (comp (filter #(>= 14 (tick/days (tick/between (tick/instant (:timestamp %))
                                                                            (tick/instant)))))
                                   (filter (complement :pinned))
@@ -166,7 +191,7 @@
   "Subcommand for retrieving a tag by name."
   [conn interaction]
   (let [env (tag-env interaction)
-        name (get-in interaction [:data :options 0 :options 0])]
+        name (:value (option->option (interaction->option interaction 0) 0))]
     (if (:focused name)
       (tag-autocomplete conn interaction (:value name) env)
       (respond conn interaction (:channel-message-with-source interaction-response-types)
@@ -179,9 +204,8 @@
   "Subcommand for creating a tag with a name and content."
   [conn interaction]
   (let [env (tag-env interaction)
-        options (get-in interaction [:data :options 0 :options])
-        name (get-in options [0 :value])
-        content (get-in options [1 :value])]
+        name (:value (option->option (interaction->option interaction 0) 0))
+        content (:value (option->option (interaction->option interaction 0) 1))]
     (respond conn interaction (:channel-message-with-source interaction-response-types)
              :data {:content (if (seq (tagq name (tag-env interaction)))
                                "Tag already exists."
@@ -196,7 +220,7 @@
   "Subcommand for deleting a tag by name."
   [conn interaction]
   (let [env (tag-env interaction)
-        name (get-in interaction [:data :options 0 :options 0])]
+        name (option->option (interaction->option interaction 0) 0)]
     (if (:focused name)
       (tag-autocomplete conn interaction (:value name) env)
       (respond conn interaction (:channel-message-with-source interaction-response-types)
@@ -235,7 +259,7 @@
                          :required true
                          :autocomplete true}]}]}
   [conn interaction]
-  (case (get-in interaction [:data :options 0 :name])
+  (case (interaction->name interaction 0)
     "get" (tag-get conn interaction)
     "create" (tag-create conn interaction)
     "delete" (tag-delete conn interaction)))
@@ -281,7 +305,7 @@
                    :query-params {:action "query"
                                   :format "json"
                                   :list "search"
-                                  :srsearch (:value (first (:options (:data interaction))))
+                                  :srsearch (interaction->value interaction 0)
                                   :srnamespace 0}}
                   #(go (>! res %))
                   (constantly nil))
@@ -302,7 +326,7 @@
                                                           :default-permission :doc :max-value :min-value
                                                           :options :required :type])
                                             (rename-keys {:doc :description})
-                                            (assoc :command v)))
+                                            (assoc :fn v)))
                    m))) {} (ns-publics *ns*)))
 
 (def discord-commands
@@ -310,4 +334,4 @@
    endpoint."
   (reduce-kv #(conj %1 (-> %3
                            (assoc :name %2)
-                           (dissoc :command))) [] commands))
+                           (dissoc :fn))) [] commands))
