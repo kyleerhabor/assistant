@@ -20,7 +20,7 @@ retaining gimmicks and complexity that places burden on the user. For example, a
 user's avatar with links to additional formats (PNG, JPEG, WebP, and GIF) and sizes, but this is often unnecessary as 
 it adds more information than the user needs. The user just wanted *some* image—not all of them in all their forms. The 
 command could've been written to use optional parameters, but traditional commands using positional or named arguments 
-(with dashes usually) were often difficult and confusing, resulting in more consults to the help command. This
+(with dashes usually) are often difficult and confusing, resulting in more consults to the help command. This
 anti-pattern is common among bots of all sizes.
 
 A fundamental goal of Assistant is to provide a simple experience with a standardized interface. This meant first-class
