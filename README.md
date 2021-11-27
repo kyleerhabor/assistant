@@ -1,8 +1,31 @@
 # Assistant
 
+![Banner](./banner.png)
+
 A Discord bot to assist my everyday needs.
 
 [Invite (Private)](https://discord.com/api/oauth2/authorize?client_id=856158596344709130&permissions=8192&scope=applications.commands%20bot)
+
+## Rationale
+
+The Discord bot space is over-saturated—why another one?
+
+Discord bots are cool. Before application commands, a bot would read sent messages, validate and conform it, and run a
+command the bot defined. However, there was no formally standardized way to issue or develop commands. While bots were
+flexible, the lack of a system breeded individualism, requiring them to adopt their own prefixes (for conflict
+resolution against other bots), help commands, syntax, and niches for users to comprehend.
+
+With application commands, many bots are migrating their traditional commands to use interactions, but are
+retaining gimmicks and complexity that places burden on the user. For example, an `/avatar` command may display a 
+user's avatar with additional formats (PNG, JPEG, WebP, and GIF) and sizes, but this is often unnecessary, as it adds 
+more information than the user needed. The user just wanted *some* image—not all of them in all their forms. The 
+command could've been written to use optional parameters, but traditional commands using positional or named arguments 
+(with dashes usually) were often difficult and confusing, resulting in more consults to the help command. This
+anti-pattern is common among bots of all sizes.
+
+A fundamental goal of Assistant is to provide a simple experience with a standardized interface. This meant first-class
+support for application commands (subcommands, groups, typed parameters, autocompletion, etc.) while rejecting commands
+and details the user doesn't need. I hope you find Assistant's view of simplicity easy and fun to use.
 
 ## Installing
 
