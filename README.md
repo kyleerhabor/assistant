@@ -17,8 +17,8 @@ resolution against other bots), help commands, syntax, and niches for users to c
 
 With application commands, many bots are migrating their traditional commands to use interactions, but are
 retaining gimmicks and complexity that places burden on the user. For example, an `/avatar` command may display a 
-user's avatar with additional formats (PNG, JPEG, WebP, and GIF) and sizes, but this is often unnecessary, as it adds 
-more information than the user needed. The user just wanted *some* image—not all of them in all their forms. The 
+user's avatar with links to additional formats (PNG, JPEG, WebP, and GIF) and sizes, but this is often unnecessary as 
+it adds more information than the user needs. The user just wanted *some* image—not all of them in all their forms. The 
 command could've been written to use optional parameters, but traditional commands using positional or named arguments 
 (with dashes usually) were often difficult and confusing, resulting in more consults to the help command. This
 anti-pattern is common among bots of all sizes.
