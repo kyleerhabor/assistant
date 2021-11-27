@@ -17,7 +17,7 @@
 (defmethod handler :ready
   [_ _ data]
   (log/info (str "Connected as " (fmt/user-tag (:user data))
-                 " (" (-> data :user :id) " | Shard: " (first (:shard data)) \))))
+                 " (" (:id (:user data)) " | Shard: " (first (:shard data)) \))))
 
 (defmethod handler :default
   [_ _ _])

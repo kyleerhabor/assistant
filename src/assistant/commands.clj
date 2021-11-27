@@ -39,12 +39,18 @@
   {:options [{:type (:user command-option-types)
               :name "user"
               :description "The user to get the avatar of."
-              :required true}]}
+              :required true}
+             {:type (:integer command-option-types)
+              :name "size"
+              :description "The size of the avatar."
+              :choices (map #(identity {:name (str %)
+                                        :value %}) [16 32 64 128 256 512 1024 2048 4096])}]}
   [conn interaction]
   (let [user (get (:users (:resolved (:data interaction)))
-                  (:value (first (:options (:data interaction)))))]
+                  (:value (first (:options (:data interaction)))))
+        size (or (:value (second (:options (:data interaction)))) 4096)]
     (respond conn interaction (:channel-message-with-source interaction-response-types)
-             :data {:content (ds.cdn/resize (ds.cdn/effective-user-avatar user) 4096)})))
+             :data {:content (ds.cdn/resize (ds.cdn/effective-user-avatar user) size)})))
 
 (defn ^:command purge
   "Deletes messages from a channel."

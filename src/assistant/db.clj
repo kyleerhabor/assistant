@@ -1,7 +1,7 @@
 (ns assistant.db
+  (:import [java.util UUID])
   (:require [xtdb.api :as xt]
-            [compact-uuids.core :as uuid])
-  (:import [java.util UUID]))
+            [compact-uuids.core :as uuid]))
 
 (defn kv-store [dir]
   {:kv-store {:xtdb/module 'xtdb.rocksdb/->kv-store
