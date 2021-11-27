@@ -11,22 +11,21 @@ A Discord bot to assist my everyday needs.
 The Discord bot space is oversaturated—why another one?
 
 Discord bots are cool. Before application commands, a bot would read, validate, conform, and process messages as they 
-were sent. It was very flexible, but lacked a standardized way to issue. While many bots adopted the same principles,
-the lack of a system breeded individualism, requiring them to adopt prefixes, syntaxes, help commands, and niches
-slightly differing between between each other. Consequently, users were forced to learn each bot's language and vocabulary.
+were sent. It was very flexible, but lacked a standardized way to issue commands. While many bots adopted the same
+principles, the lack of a system breeded individualism, requiring them to adopt prefixes, syntaxes, help commands, and
+niches slightly differing between between one another. Consequently, users were forced to learn each bot's language and vocabulary.
 
-With application commands, many bots are migrating their traditional commands to use interactions, but are
-retaining gimmicks and complexity that places burden on the user. For example, an `/avatar` command may display a 
+With application commands, many bots migrated their traditional commands to use interactions, but retained the gimmicks and complexities of their former implementations. For example, an `/avatar` command may display a 
 user's avatar with links to additional formats (PNG, JPEG, WebP, and GIF) and sizes, but this is often unnecessary as 
 it adds more information than the user needs. The user just wanted *some* image—not all of them in all their forms. The 
 command could've been written to use optional parameters, but traditional commands using positional or named arguments 
-(with dashes usually) are often difficult and confusing, resulting in more consults to the help command. These 
+(with dashes usually) are notoriously difficult to comprehend, resulting in more consults to the help command. These 
 anti-patterns are common among bots of all sizes.
 
 I wanted a bot capable of providing a simple interface and experience, but couldn't find one I liked. In protest,
 Assistant was created to address those issues—first class support for application commands (subcommands, groups, typed
 parameters, autocompletion, etc.) while only showing the details that matter. Assistant's principles are based on what
-makes traditional commands and interactions appealing to users and I hope you enjoy it.
+makes traditional commands and interactions appealing to users and I hope you enjoy them.
 
 *- Klay#7753*
 
