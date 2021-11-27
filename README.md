@@ -20,12 +20,15 @@ retaining gimmicks and complexity that places burden on the user. For example, a
 user's avatar with links to additional formats (PNG, JPEG, WebP, and GIF) and sizes, but this is often unnecessary as 
 it adds more information than the user needs. The user just wanted *some* image—not all of them in all their forms. The 
 command could've been written to use optional parameters, but traditional commands using positional or named arguments 
-(with dashes usually) are often difficult and confusing, resulting in more consults to the help command. This
-anti-pattern is common among bots of all sizes.
+(with dashes usually) are often difficult and confusing, resulting in more consults to the help command. These 
+anti-patterns are common among bots of all sizes.
 
-A fundamental goal of Assistant is to provide a simple experience with a standardized interface. This meant first-class
-support for application commands (subcommands, groups, typed parameters, autocompletion, etc.) while rejecting commands
-and details the user doesn't need. I hope you find Assistant's view of simplicity easy and fun to use.
+I wanted a bot capable of providing a simple interface and experience, but couldn't find one I liked. In protest,
+Assistant was created to address those issues—first class support for application commands (subcommands, groups, typed
+parameters, autocompletion, etc.) while only showing the details that matter. Assistant's principles are based on what
+makes traditional commands and interactions appealing to users and I hope you enjoy it.
+
+*- Klay#7753*
 
 ## Installing
 
