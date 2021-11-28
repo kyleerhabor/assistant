@@ -1,17 +1,18 @@
 (ns assistant.commands
   "Command facilities for Assistant.
    
-   Commands are declared as functions with ^:command. The function name, documentation, and metadata is used to extract
-   the data about a command to the `commands` and `discord-commands` vars. There's no special handling for subcommands
-   or subcommand groups. Conventionally, they're declared as regular functions following the format 
+   Commands are declared as functions with `^:command`. The function name, documentation, and metadata is used to
+   extract the data about a command to the `commands` and `discord-commands` vars. There's no special handling for
+   subcommands or subcommand groups. Conventionally, they're declared as regular functions following the format 
    command-group-subcommand. If the subcommand doesn't have a group, it should be excluded from the name. For example,
-   `tag-get` rather than `tag-?-get`."
+   tag-get rather than tag-?-get."
   (:require [clojure.core.async :refer [>! <! chan go timeout]]
             [clojure.edn :as edn]
             [clojure.set :refer [rename-keys]]
             [clojure.string :as str]
+            [clojure.walk :refer [postwalk]]
             [assistant.db :as db]
-            [clj-http.client :as client]
+            [clj-http.client :as http]
             [discljord.cdn :as ds.cdn]
             [discljord.formatting :as ds.fmt]
             [discljord.messaging :refer [bulk-delete-messages! create-interaction-response!
@@ -20,7 +21,7 @@
             [discljord.messaging.specs :refer [command-option-types interaction-response-types]]
             [discljord.permissions :as ds.p]
             [hickory.core :as hick]
-            [hickory.select :as sel]
+            [hickory.select :as hick.s]
             [tick.core :as tick]
             [xtdb.api :as xt]))
 
@@ -264,6 +265,69 @@
     "create" (tag-create conn interaction)
     "delete" (tag-delete conn interaction)))
 
+(defonce trivia-categories (reduce #(assoc %1 (:name %2) (:id %2)) {}
+                                   ;; In case Open Trivia DB adds more than 25.
+                                   (take 25 (:trivia_categories (:body (http/get "https://opentdb.com/api_category.php" {:as :json}))))))
+
+(defn ^:command trivia
+  "Runs a trivia."
+  {:options [{:type (:string command-option-types)
+              :name "category"
+              :description "The category the question belongs to."
+              :choices (map #(identity {:name %
+                                        :value %}) (keys trivia-categories))}
+             {:type (:string command-option-types)
+              :name "difficulty"
+              :description "The difficulty of the question."
+              :choices (map #(identity {:name %
+                                        :value %}) ["Easy" "Medium" "Hard"])}
+             {:type (:string command-option-types)
+              :name "type"
+              :description "The amount of answers the question should have."
+              :choices (map #(identity {:name %
+                                        :value %}) ["Multiple Choice" "True/False"])}]}
+  [conn interaction]
+  (go
+    (respond conn interaction (:channel-message-with-source interaction-response-types)
+             :data (if (= 3 (:type interaction))
+                     {:content (let [data (:data interaction)
+                                     answer (first (:values data))]
+                                 (str answer "—" (if (= answer (:custom-id data))
+                                                   "Correct! 🎉"
+                                                   "Wrong. 😔")))}
+                     (let [res (chan)]
+                       (http/get "https://opentdb.com/api.php"
+                                 {:as :json
+                                  :async? true
+                                  :query-params {:amount 1
+                                                 :category (get trivia-categories (interaction->value interaction 0))
+                                                 :difficulty (some-> (interaction->value interaction 1)
+                                                                     str/lower-case)
+                                                 :type (case (interaction->value interaction 2)
+                                                         "Multiple Choice" "multiple"
+                                                         "True/False" "boolean"
+                                                         nil)}}
+                                 #(go (>! res %))
+                                 (constantly nil))
+                       (let [trivia (first (:results (postwalk #(if (string? %)
+                                                                  ;; For some reason, Open Trivia DB corrupts the HTML
+                                                                  ;; entity encoding.
+                                                                  (.text (first (hick/parse-fragment (str/replace % "amp;" ""))))
+                                                                  %) (:body (<! res)))))]
+                         {:content (:question trivia)
+                          :components [{:type 1
+                                        :components [{:type 3
+                                                      :custom_id (:correct_answer trivia)
+                                                      :options (for [answer (if (= "boolean" (:type trivia))
+                                                                              ;; It's often annoying to have boolean
+                                                                              ;; answers shuffled, so we're going to
+                                                                              ;; keep them in the same order. If you've
+                                                                              ;; ever played Kahoot, you know the pain.
+                                                                              ["True" "False"]
+                                                                              (shuffle (conj (:incorrect_answers trivia) (:correct_answer trivia))))]
+                                                                 {:label answer
+                                                                  :value answer})}]}]}))))))
+
 (def wm-user-agent
   "A user agent string conforming to the [Wikimedia User-Agent policy](https://meta.wikimedia.org/wiki/User-Agent_policy)."
   (str "AssistantBot/0.1.0 (https://github.com/KyleErhabor/assistant; kyleerhabor@gmail.com)"
@@ -282,8 +346,8 @@
                 (str fragment)
                 (->> fragment
                      hick/as-hickory
-                     (sel/select (sel/child (sel/and (sel/tag :span)
-                                                     (sel/class :searchmatch))))
+                     (hick.s/select (hick.s/child (hick.s/and (hick.s/tag :span)
+                                                     (hick.s/class :searchmatch))))
                      first
                      :content
                      first
@@ -298,7 +362,7 @@
   [conn interaction]
   (go
     (let [res (chan)]
-      (client/get "https://en.wikipedia.org/w/api.php"
+      (http/get "https://en.wikipedia.org/w/api.php"
                   {:as :json
                    :async? true
                    :headers {:User-Agent wm-user-agent}

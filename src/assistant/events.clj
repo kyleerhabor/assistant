@@ -10,8 +10,12 @@
 (defmethod handler :interaction-create
   [conn _ interaction]
   (if (#{2 3 4} (:type interaction))
-    (if-let [name (:name (or (:data interaction)
-                             (:interaction (:message interaction))))]
+    ;; It may look like this (or ...) could be shortened to get :name once one of the two have been resolved, but do not
+    ;; be fooled. The interaction data map won't have a :name key for components. The second argument could be evaluated
+    ;; first, but I doubt message commands are more common than interaction commands (order of importance). Hence, :name
+    ;; is checked separately.
+    (if-let [name (or (:name (:data interaction))
+                      (:name (:interaction (:message interaction))))]
       ((:fn ((keyword name) commands)) conn interaction))))
 
 (defmethod handler :ready
