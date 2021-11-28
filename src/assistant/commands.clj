@@ -1,17 +1,17 @@
 (ns assistant.commands
   "Command facilities for Assistant.
    
-   Commands are declared as functions with ^:command. The function name, documentation, and metadata is used to extract
-   the data about a command to the `commands` and `discord-commands` vars. There's no special handling for subcommands
-   or subcommand groups. Conventionally, they're declared as regular functions following the format 
+   Commands are declared as functions with `^:command`. The function name, documentation, and metadata is used to
+   extract the data about a command to the `commands` and `discord-commands` vars. There's no special handling for
+   subcommands or subcommand groups. Conventionally, they're declared as regular functions following the format 
    command-group-subcommand. If the subcommand doesn't have a group, it should be excluded from the name. For example,
-   `tag-get` rather than `tag-?-get`."
+   tag-get rather than tag-?-get."
   (:require [clojure.core.async :refer [>! <! chan go timeout]]
             [clojure.edn :as edn]
             [clojure.set :refer [rename-keys]]
             [clojure.string :as str]
             [assistant.db :as db]
-            [clj-http.client :as client]
+            [clj-http.client :as http]
             [discljord.cdn :as ds.cdn]
             [discljord.formatting :as ds.fmt]
             [discljord.messaging :refer [bulk-delete-messages! create-interaction-response!
@@ -20,7 +20,7 @@
             [discljord.messaging.specs :refer [command-option-types interaction-response-types]]
             [discljord.permissions :as ds.p]
             [hickory.core :as hick]
-            [hickory.select :as sel]
+            [hickory.select :as hick.s]
             [tick.core :as tick]
             [xtdb.api :as xt]))
 
@@ -59,6 +59,15 @@
   [interaction pos]
   (:name (interaction->option interaction pos)))
 
+(def wm-user-agent
+  "A string conforming to the [Wikimedia User-Agent policy](https://meta.wikimedia.org/wiki/User-Agent_policy)."
+  (str "AssistantBot/1.0 (https://github.com/KyleErhabor/assistant; kyleerhabor@gmail.com)"
+       " Clojure/" (clojure-version) ";"
+       " clj-http/" (-> (edn/read-string (slurp "deps.edn"))
+                        :deps
+                        ('clj-http/clj-http)
+                        :mvn/version)))
+
 (defn ^:command avatar
   "Gets a user's avatar."
   {:options [{:type (:user command-option-types)
@@ -76,6 +85,52 @@
         size (or (interaction->value interaction 1) 4096)]
     (respond conn interaction (:channel-message-with-source interaction-response-types)
              :data {:content (ds.cdn/resize (ds.cdn/effective-user-avatar user) size)})))
+
+(defn ^:command wiktionary
+  "Search Wiktionary to define a word."
+  {:options [{:type (:string command-option-types)
+              :name "word"
+              :description "The word to define."
+              :required true
+              :autocomplete true}]}
+  [conn interaction]
+  (go
+    (let [opt (interaction->option interaction 0)]
+      (let [res (chan)]
+        (http/get "https://en.wiktionary.org/w/api.php" {:as :json
+                                                         :async? true
+                                                         :headers {:User-Agent wm-user-agent}
+                                                         :query-params (merge {:action "query"
+                                                                               :format "json"
+                                                                               :formatversion "2"}
+                                                                              (if (:focused opt)
+                                                                                {:list "search"
+                                                                                 :srsearch (:value opt)
+                                                                                 :srnamespace "0"
+                                                                                 :srlimit "25"
+                                                                                 :srinfo ""
+                                                                                 :srprop ""}
+                                                                                {:prop "pageimages|extracts"
+                                                                                 :titles (:value opt)
+                                                                                 :piprop "thumbnail"
+                                                                                 :pilicense "any"
+                                                                                 :pithumbsize "4096"}))}
+                  #(go (>! res %))
+                  (constantly nil))
+        (if (:focused opt)
+          (respond conn interaction 8
+                   :data {:choices (for [result (:search (:query (:body (<! res))))]
+                                     {:name (:title result)
+                                      :value (:title result)})})
+          (respond conn interaction (:channel-message-with-source interaction-response-types)
+                   ;; MediaWiki uses vertical bars represent multiple options, which is supported for title queries.
+                   ;; While we could limit selection, I'll just let the user pick if they get smart.
+                   :data (if-let [page (first (filter (complement :missing) (:pages (:query (:body (<! res))))))]
+                           {:embeds [{:title (:title page)
+                                      :url (str "https://en.wiktionary.org/wiki/" (:title page))
+                                      :thumbnail {:url (:source (:thumbnail page))}
+                                      :description (:extract page)}]}
+                           {:content "No results found."})))))))
 
 (defn ^:command purge
   "Deletes messages from a channel."
@@ -151,18 +206,18 @@
                                                      :inline true}))})]})))
 
 (defn tagq
-  "Searches for a tag by its name and the bound environment. `env` should be a map with a :guild or :user key."
+  "Returns a tag by its name and bound environment. `env` should be a map with a :guild or :user key."
   [name env]
-  (xt/q (xt/db db/node) '{:find [(pull ?e [:xt/id :tag/name :tag/content])]
-                          :in [?name ?guild ?user]
-                          :where [[?e :tag/name ?name]
-                                  (or (and [?e :tag/guild ?guild]
-                                           [(any? ?user)])
-                                      (and [?e :tag/user ?user]
-                                           [(any? ?guild)]))]} name (:guild env) (:user env)))
+  (first (first (xt/q (xt/db db/node) '{:find [(pull ?e [:xt/id :tag/name :tag/content])]
+                                        :in [?name ?guild ?user]
+                                        :where [[?e :tag/name ?name]
+                                                (or (and [?e :tag/guild ?guild]
+                                                         [(any? ?user)])
+                                                    (and [?e :tag/user ?user]
+                                                         [(any? ?guild)]))]} name (:guild env) (:user env)))))
 
 (defn tag-autocomplete
-  "Handles tag autocompletion searching by name."
+  "Handles tag autocompletion via search by name."
   [conn interaction name env]
   (respond conn interaction 8
            :data {:choices (for [tag (xt/q (xt/db db/node)
@@ -264,15 +319,6 @@
     "create" (tag-create conn interaction)
     "delete" (tag-delete conn interaction)))
 
-(def wm-user-agent
-  "A user agent string conforming to the [Wikimedia User-Agent policy](https://meta.wikimedia.org/wiki/User-Agent_policy)."
-  (str "AssistantBot/0.1.0 (https://github.com/KyleErhabor/assistant; kyleerhabor@gmail.com)"
-                        " Clojure/" (clojure-version) ";"
-                        " clj-http/" (-> (edn/read-string (slurp "deps.edn"))
-                                         :deps
-                                         ('clj-http/clj-http)
-                                         :mvn/version)))
-
 (defn wp-snippet-content
   "Converts HTML in an article snippet into Markdown. Currently only transforms `<span class=searchmatch ...>` into
    `**...**`."
@@ -282,8 +328,8 @@
                 (str fragment)
                 (->> fragment
                      hick/as-hickory
-                     (sel/select (sel/child (sel/and (sel/tag :span)
-                                                     (sel/class :searchmatch))))
+                     (hick.s/select (hick.s/child (hick.s/and (hick.s/tag :span)
+                                                              (hick.s/class :searchmatch))))
                      first
                      :content
                      first
@@ -298,7 +344,7 @@
   [conn interaction]
   (go
     (let [res (chan)]
-      (client/get "https://en.wikipedia.org/w/api.php"
+      (http/get "https://en.wikipedia.org/w/api.php"
                   {:as :json
                    :async? true
                    :headers {:User-Agent wm-user-agent}
@@ -306,7 +352,7 @@
                                   :format "json"
                                   :list "search"
                                   :srsearch (interaction->value interaction 0)
-                                  :srnamespace 0}}
+                                  :srnamespace "0"}}
                   #(go (>! res %))
                   (constantly nil))
       (respond conn interaction (:channel-message-with-source interaction-response-types)
