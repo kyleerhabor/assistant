@@ -274,18 +274,15 @@
   {:options [{:type (:string command-option-types)
               :name "category"
               :description "The category the question belongs to."
-              :choices (map #(identity {:name %
-                                        :value %}) (keys trivia-categories))}
+              :choices (map #(zipmap [:name :value] (repeat %)) (keys trivia-categories))}
              {:type (:string command-option-types)
               :name "difficulty"
               :description "The difficulty of the question."
-              :choices (map #(identity {:name %
-                                        :value %}) ["Easy" "Medium" "Hard"])}
+              :choices (map #(zipmap [:name :value] (repeat %)) ["Easy" "Medium" "Hard"])}
              {:type (:string command-option-types)
               :name "type"
               :description "The amount of answers the question should have."
-              :choices (map #(identity {:name %
-                                        :value %}) ["Multiple Choice" "True/False"])}]}
+              :choices (map #(zipmap [:name :value] (repeat %)) ["Multiple Choice" "True/False"])}]}
   [conn interaction]
   (go
     (respond conn interaction (:channel-message-with-source interaction-response-types)
