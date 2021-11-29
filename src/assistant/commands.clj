@@ -6,7 +6,9 @@
    subcommands or subcommand groups. Conventionally, they're declared as regular functions following the format 
    command-group-subcommand. If the subcommand doesn't have a group, it should be excluded from the name. For example,
    tag-get rather than tag-?-get."
-  (:require [clojure.core.async :refer [>! <! chan go timeout]]
+  (:refer-clojure :exclude [range])
+  (:require [clojure.core :as c]
+            [clojure.core.async :refer [>! <! chan go timeout]]
             [clojure.edn :as edn]
             [clojure.set :refer [rename-keys]]
             [clojure.string :as str]
@@ -31,34 +33,9 @@
   (apply create-interaction-response! conn (:id interaction) (:token interaction) args))
 
 (defn resize-image
-  "Resizes an image if not `nil`."
+  "Resizes an image if `url` is not `nil`."
   [url]
   (and url (ds.cdn/resize url 4096)))
-
-(defn option->option
-  "Converts an [Interaction Data](https://discord.com/developers/docs/interactions/receiving-and-responding#interaction-object-interaction-data-structure)
-   or an [Application Command Interaction Data Option](https://discord.com/developers/docs/interactions/application-commands#application-command-object-application-command-interaction-data-option-structure)
-   to an Application Command Interaction Data Option."
-  [option pos]
-  (get (:options option) pos))
-
-(defn interaction->option
-  "Converts an [Interaction](https://discord.com/developers/docs/interactions/receiving-and-responding#interaction-object-interaction-structure)
-   to an [Application Command Interaction Data Option](https://discord.com/developers/docs/interactions/application-commands#application-command-object-application-command-interaction-data-option-structure)."
-  [interaction pos]
-  (option->option (:data interaction) pos))
-
-(defn interaction->value
-  "Converts an [Interaction](https://discord.com/developers/docs/interactions/receiving-and-responding#interaction-object-interaction-structure)
-   to the value of an [Application Command Interaction Data Option](https://discord.com/developers/docs/interactions/application-commands#application-command-object-application-command-interaction-data-option-structure)."
-  [interaction pos]
-  (:value (interaction->option interaction pos)))
-
-(defn interaction->name
-  "Converts an [Interaction](https://discord.com/developers/docs/interactions/receiving-and-responding#interaction-object-interaction-structure)
-   to the name of an [Application Command Interaction Data Option](https://discord.com/developers/docs/interactions/application-commands#application-command-object-application-command-interaction-data-option-structure)."
-  [interaction pos]
-  (:name (interaction->option interaction pos)))
 
 (defn ^:command avatar
   "Gets a user's avatar."
@@ -73,8 +50,8 @@
                                         :value %}) [16 32 64 128 256 512 1024 2048 4096])}]}
   [conn interaction]
   (let [user (get (:users (:resolved (:data interaction)))
-                  (interaction->value interaction 0))
-        size (or (interaction->value interaction 1) 4096)]
+                  (:value (:user (:options (:data interaction)))))
+        size (or (:value (:size (:options (:data interaction)))) 4096)]
     (respond conn interaction (:channel-message-with-source interaction-response-types)
              :data {:content (ds.cdn/resize (ds.cdn/effective-user-avatar user) size)})))
 
@@ -93,8 +70,8 @@
   [conn interaction]
   (go
     (if (ds.p/has-permission-flag? :manage-messages (:permissions (:member interaction)))
-      (let [amount (interaction->value interaction 0)
-            user (interaction->value interaction 1)
+      (let [amount (:value (:amount (:options (:data interaction))))
+            user (:value (:user (:options (:data interaction))))
             msgs (transduce (comp (filter #(>= 14 (tick/days (tick/between (tick/instant (:timestamp %))
                                                                            (tick/instant)))))
                                   (filter (complement :pinned))
@@ -115,6 +92,37 @@
           (delete-original-interaction-response! conn (:application-id interaction) (:token interaction))))
       (respond conn interaction (:channel-message-with-source interaction-response-types)
                :data {:content "Missing Manage Messages permission."}))))
+
+(defn ^:command range
+  "Picks a random number from a range."
+  {:options [{:type (:integer command-option-types)
+              :name "max"
+              :description "The highest number."
+              :required true}
+             {:type (:integer command-option-types)
+              :name "min"
+              :description "The lowest number (defaults to 1)."}
+             {:type (:integer command-option-types)
+              :name "amount"
+              :description "The amount of numbers to pick (defaults to 1). May return less than requested."
+              :min_value 1}]}
+  [conn interaction]
+  (respond conn interaction (:channel-message-with-source interaction-response-types)
+           :data {:content (let [opts (:options (:data interaction))
+                                 high (:value (:max opts))
+                                 low (or (:value (:min opts)) 1)
+                                 amount (min (or (:value (:amount opts)) 1) (- high low))
+                                 ;; To use (shuffle ...) here would be suicidal as it's not lazy. Lazy processing is 
+                                 ;; imperative to keeping this command fast and efficient. Instead, `random-sample` is
+                                 ;; preferrable.
+                                 nums (take amount (random-sample (* (/ 1 (- high low)) amount)
+                                                                  (c/range low (inc high))))]
+                             (if (seq nums)
+                               (str (str/join " " nums) (let [rem (- amount (count nums))]
+                                                          (if-not (= 0 rem)
+                                                            (str " (" (ds.fmt/bold rem)
+                                                                 " number" (if-not (= 1 rem) \s) " missing)"))))
+                               "No numbers."))}))
 
 (defn ^:command server
   "Gets information about the server."
@@ -192,7 +200,7 @@
   "Subcommand for retrieving a tag by name."
   [conn interaction]
   (let [env (tag-env interaction)
-        name (:value (option->option (interaction->option interaction 0) 0))]
+        name (:name (:options (:get (:options (:data interaction)))))]
     (if (:focused name)
       (tag-autocomplete conn interaction (:value name) env)
       (respond conn interaction (:channel-message-with-source interaction-response-types)
@@ -205,8 +213,9 @@
   "Subcommand for creating a tag with a name and content."
   [conn interaction]
   (let [env (tag-env interaction)
-        name (:value (option->option (interaction->option interaction 0) 0))
-        content (:value (option->option (interaction->option interaction 0) 1))]
+        opts (:options (:create (:options (:data interaction))))
+        name (:value (:name opts))
+        content (:value (:content opts))]
     (respond conn interaction (:channel-message-with-source interaction-response-types)
              :data {:content (if (seq (tagq name (tag-env interaction)))
                                "Tag already exists."
@@ -221,7 +230,7 @@
   "Subcommand for deleting a tag by name."
   [conn interaction]
   (let [env (tag-env interaction)
-        name (option->option (interaction->option interaction 0) 0)]
+        name (:name (:options (:delete (:options (:data interaction)))))]
     (if (:focused name)
       (tag-autocomplete conn interaction (:value name) env)
       (respond conn interaction (:channel-message-with-source interaction-response-types)
@@ -260,10 +269,10 @@
                          :required true
                          :autocomplete true}]}]}
   [conn interaction]
-  (case (interaction->name interaction 0)
-    "get" (tag-get conn interaction)
-    "create" (tag-create conn interaction)
-    "delete" (tag-delete conn interaction)))
+  (case (key (first (:options (:data interaction))))
+    :get (tag-get conn interaction)
+    :create (tag-create conn interaction)
+    :delete (tag-delete conn interaction)))
 
 (defonce trivia-categories (reduce #(assoc %1 (:name %2) (:id %2)) {}
                                    ;; In case Open Trivia DB adds more than 25.
@@ -291,16 +300,20 @@
                                      answer (first (:values data))]
                                  (str answer "—" (if (= answer (:custom-id data))
                                                    "Correct! 🎉"
-                                                   "Wrong. 😔")))}
-                     (let [res (chan)]
+                                                   "Wrong. 😔")))
+                      :flags (bit-shift-left 1 6)}
+                     (let [res (chan)
+                           category (:value (:category (:options (:data interaction))))
+                           difficulty (:value (:difficulty (:options (:data interaction))))
+                           type (:value (:type (:options (:data interaction))))]
                        (http/get "https://opentdb.com/api.php"
                                  {:as :json
                                   :async? true
                                   :query-params {:amount 1
-                                                 :category (get trivia-categories (interaction->value interaction 0))
-                                                 :difficulty (some-> (interaction->value interaction 1)
-                                                                     str/lower-case)
-                                                 :type (case (interaction->value interaction 2)
+                                                 :category (trivia-categories category)
+                                                 :difficulty (if difficulty
+                                                               (str/lower-case difficulty))
+                                                 :type (case type
                                                          "Multiple Choice" "multiple"
                                                          "True/False" "boolean"
                                                          nil)}}
@@ -358,18 +371,18 @@
               :required true}]}
   [conn interaction]
   (go
-    (let [res (chan)]
-      (http/get "https://en.wikipedia.org/w/api.php"
-                  {:as :json
-                   :async? true
-                   :headers {:User-Agent wm-user-agent}
-                   :query-params {:action "query"
-                                  :format "json"
-                                  :list "search"
-                                  :srsearch (interaction->value interaction 0)
-                                  :srnamespace 0}}
-                  #(go (>! res %))
-                  (constantly nil))
+    (let [res (chan)
+          query (:value (:query (:options (:data interaction))))]
+      (http/get "https://en.wikipedia.org/w/api.php" {:as :json
+                                                      :async? true
+                                                      :headers {:User-Agent wm-user-agent}
+                                                      :query-params {:action "query"
+                                                                     :format "json"
+                                                                     :list "search"
+                                                                     :srsearch query
+                                                                     :srnamespace 0}}
+                #(go (>! res %))
+                (constantly nil))
       (respond conn interaction (:channel-message-with-source interaction-response-types)
                :data {:embeds [{:title "Results"
                                 :fields (for [result (:search (:query (:body (<! res))))]

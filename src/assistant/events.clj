@@ -3,6 +3,13 @@
             [assistant.commands :refer [commands]]
             [discljord.formatting :as fmt]))
 
+(defn options->map
+  "Recursively transforms `m` to convert `:options` keys from vectors of maps to just maps."
+  [m]
+  (if (contains? m :options)
+    (update m :options (partial reduce #(assoc %1 (keyword (:name %2)) (options->map %2)) {}))
+    m))
+
 (defmulti handler
   "Handler for Discord API events."
   (fn [_ type _] type))
@@ -16,7 +23,7 @@
     ;; is checked separately.
     (if-let [name (or (:name (:data interaction))
                       (:name (:interaction (:message interaction))))]
-      ((:fn ((keyword name) commands)) conn interaction))))
+      ((:fn ((keyword name) commands)) conn (update interaction :data options->map)))))
 
 (defmethod handler :ready
   [_ _ data]
