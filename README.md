@@ -38,7 +38,7 @@ run in the top-level directory of the project. `<token>` refers to the [Discord 
 
 ### Clojure
 
-If you'd prefer to use Clojure directly, you can run the following command:
+If you'd prefer to use Clojure directly, run:
 
 ```sh
 clojure -M -m assistant.core <token>
@@ -46,8 +46,7 @@ clojure -M -m assistant.core <token>
 
 ### Java
 
-Run `clj -T:build uber` build the project. This may take a while to complete (e.g. a minute). Once finished, run the
-following command to start the bot:
+Run `clj -T:build uber` to build the project. This may take a while to complete (e.g. a minute). Once finished, run:
 ```sh
 java -jar target/assistant-<version>-standalone.jar <token>
 ```
