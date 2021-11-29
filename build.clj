@@ -2,7 +2,7 @@
   (:require [clojure.tools.build.api :as b]))
 
 (def lib 'com.kyleerhabor/assistant)
-(def version (str "1.0." (b/git-count-revs nil)))
+(def version "1.1.0")
 (def class-dir "target/classes")
 (def basis (b/create-basis {:project "deps.edn"}))
 

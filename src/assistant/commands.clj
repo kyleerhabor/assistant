@@ -340,12 +340,12 @@
 
 (def wm-user-agent
   "A user agent string conforming to the [Wikimedia User-Agent policy](https://meta.wikimedia.org/wiki/User-Agent_policy)."
-  (str "AssistantBot/0.1.0 (https://github.com/KyleErhabor/assistant; kyleerhabor@gmail.com)"
-                        " Clojure/" (clojure-version) ";"
-                        " clj-http/" (-> (edn/read-string (slurp "deps.edn"))
-                                         :deps
-                                         ('clj-http/clj-http)
-                                         :mvn/version)))
+  (str "AssistantBot/1.1.0 (https://github.com/KyleErhabor/assistant; kyleerhabor@gmail.com)"
+       " Clojure/" (clojure-version) ";"
+       " clj-http/" (-> (edn/read-string (slurp "deps.edn"))
+                        :deps
+                        ('clj-http/clj-http)
+                        :mvn/version)))
 
 (defn wp-snippet-content
   "Converts HTML in an article snippet into Markdown. Currently only transforms `<span class=searchmatch ...>` into
