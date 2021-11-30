@@ -3,6 +3,7 @@
 
 # Database
 db/
+db.json
 
 # Compiled project
 target/
