@@ -18,7 +18,7 @@
             [datascript.core :as d]
             [discljord.cdn :as ds.cdn]
             [discljord.formatting :as ds.fmt]
-            [discljord.messaging :refer [bulk-delete-messages! create-interaction-response!
+            [discljord.messaging :refer [bulk-delete-messages! create-guild-ban! create-interaction-response!
                                          delete-message! delete-original-interaction-response! get-guild!
                                          get-channel-messages!]]
             [discljord.messaging.specs :refer [command-option-types interaction-response-types]]
@@ -54,6 +54,28 @@
         size (or (:value (:size (:options (:data interaction)))) 4096)]
     (respond conn interaction (:channel-message-with-source interaction-response-types)
              :data {:content (ds.cdn/resize (ds.cdn/effective-user-avatar user) size)})))
+
+(defn ^:command ban
+  "Bans a user."
+  {:options [{:type (:user command-option-types)
+              :name "user"
+              :description "The user to ban."
+              :required true}
+             {:type (:integer command-option-types)
+              :name "message-days"
+              :description "Deletes messages younger than the number of days specified."
+              :min_value 1
+              :max_value 7}
+             {:type (:string command-option-types)
+              :name "reason"
+              :description "The reason for the ban."}]}
+  [conn interaction]
+  (let [user (:value (:user (:options (:data interaction))))
+        message-days (:value (:message-days (:options (:data interaction))))
+        reason (:value (:reason (:options (:data interaction))))]
+    (create-guild-ban! conn (:guild-id interaction) user
+                       :delete-message-days message-days
+                       :audit-reason reason)))
 
 (defn ^:command purge
   "Deletes messages from a channel."
@@ -112,10 +134,12 @@
                                  high (:value (:max opts))
                                  low (or (:value (:min opts)) 1)
                                  amount (min (or (:value (:amount opts)) 1) (- high low))
-                                 ;; To use (shuffle ...) here would be suicidal as it's not lazy. Lazy processing is 
-                                 ;; imperative to keeping this command fast and efficient. Instead, `random-sample` is
-                                 ;; preferrable.
-                                 nums (take amount (random-sample (* (/ 1 (- high low)) amount)
+                                 ;; It would be nice to call (shuffle ...) or (rand-int ...) here, but they're both not
+                                 ;; lazy. `random-sample` is lazy, but still has to determine if the probability has
+                                 ;; been met. Since the probability depends on the input from the user, more numbers
+                                 ;; will be considered the wider the gap. Unfortunately, this is the result of lazy
+                                 ;; sequences being logical lists (no good way to get an element at an index).
+                                 nums (take amount (random-sample (* (/ 1 (- high low)) amount 1.5)
                                                                   (c/range low (inc high))))]
                              (if (seq nums)
                                (str (str/join " " nums) (let [rem (- amount (count nums))]
@@ -390,8 +414,8 @@
                (let [meta (meta v)]
                  (if (:command meta)
                    (assoc m (keyword k) (-> meta
-                                            (select-keys [:autocomplete :channel-types :choices
-                                                          :default-permission :doc :max-value :min-value
+                                            (select-keys [:autocomplete :channel_types :choices
+                                                          :default_permission :doc :max_value :min_value
                                                           :options :required :type])
                                             (rename-keys {:doc :description})
                                             (assoc :fn v)))
