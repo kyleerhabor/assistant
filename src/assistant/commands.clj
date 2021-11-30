@@ -162,25 +162,34 @@
 (defn tagq*
   "Queries the database for a tag by its `name`. `env` should be either `:tag/guild` or `:tag/user` with `id` being used
    to match the value."
-  [name env id]
-  (d/q '[:find (pull ?e [:db/id :tag/name :tag/content]) .
-         :in $ ?name ?env ?id
+  [patterns name env id]
+  (d/q '[:find (pull ?e ?patterns) .
+         :in $ ?patterns ?name ?env ?id
          :where [?e :tag/name ?name]
-                [?e ?env ?id]] (db/read) name env id))
+                [?e ?env ?id]] (db/read) patterns name env id))
 
-(defn tagq [name interaction]
-  (tagq* name (if (:guild-id interaction)
-               :tag/guild
-               :tag/user) (or (:guild-id interaction) (:id (:user interaction)))))
+(defn tagq-args [q interaction]
+  (q (if (:guild-id interaction)
+       :tag/guild
+       :tag/user) (or (:guild-id interaction) (:id (:user interaction)))))
+
+(defn tagq
+  [name interaction patterns]
+  (tagq-args (partial tagq* patterns name) interaction))
 
 (defn tag-autocomplete
   "Handles tag autocompletion searching by name."
   [conn interaction name]
   (respond conn interaction 8
-           :data {:choices (let [tag (tagq name interaction)]
-                             ;; TODO: Introduce proper autocompletion.
-                             [{:name tag
-                               :value tag}])}))
+           :data {:choices (for [name (tagq-args (partial d/q '[:find [?tag-name ...]
+                                                                :in $ ?name ?env ?id
+                                                                :where [?e :tag/name ?tag-name]
+                                                                       [?e ?env ?id]
+                                                                       [(clojure.string/lower-case ?tag-name) ?lower-tag-name]
+                                                                       [(clojure.string/includes? ?lower-tag-name ?name)]] (db/read) (str/lower-case name))
+                                                 interaction)]
+                             {:name name
+                              :value name})}))
 
 (defn tag-get
   "Subcommand for retrieving a tag by name."
@@ -189,7 +198,7 @@
     (if (:focused name)
       (tag-autocomplete conn interaction (:value name))
       (respond conn interaction (:channel-message-with-source interaction-response-types)
-               :data (if-let [tag (tagq (:value name) interaction)]
+               :data (if-let [tag (tagq (:value name) interaction [:tag/name :tag/content])]
                        {:embeds [{:title (:tag/name tag)
                                   :description (:tag/content tag)}]}
                        {:content "Tag not found."})))))
@@ -202,7 +211,7 @@
           name (:value (:name opts))
           content (:value (:content opts))]
       (respond conn interaction (:channel-message-with-source interaction-response-types)
-               :data {:content (if (tagq name interaction)
+               :data {:content (if (tagq name interaction [])
                                  "Tag already exists."
                                  (do (db/transact [(let [gid (:guild-id interaction)
                                                          uid (:id (:user interaction))]
@@ -219,7 +228,7 @@
     (if (:focused name)
       (tag-autocomplete conn interaction (:value name))
       (respond conn interaction (:channel-message-with-source interaction-response-types)
-               :data {:content (if-let [tag (tagq (:value name) interaction)]
+               :data {:content (if-let [tag (tagq (:value name) interaction [:db/id])]
                                  (do (db/transact [[:db.fn/retractEntity (:db/id tag)]])
                                      "Tag deleted.")
                                  "Tag not found.")}))))
