@@ -5,6 +5,7 @@
             [datascript.transit :as dt]))
 
 (defn read []
+  ;; TODO: Create the file with a blank database if it doesn't exist.
   (with-open [file (io/input-stream "db.json")]
     (dt/read-transit file)))
 
