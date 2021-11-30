@@ -115,39 +115,6 @@
       (respond conn interaction (:channel-message-with-source interaction-response-types)
                :data {:content "Missing Manage Messages permission."}))))
 
-(defn ^:command range
-  "Picks a random number from a range."
-  {:options [{:type (:integer command-option-types)
-              :name "max"
-              :description "The highest number."
-              :required true}
-             {:type (:integer command-option-types)
-              :name "min"
-              :description "The lowest number (defaults to 1)."}
-             {:type (:integer command-option-types)
-              :name "amount"
-              :description "The amount of numbers to pick (defaults to 1). May return less than requested."
-              :min_value 1}]}
-  [conn interaction]
-  (respond conn interaction (:channel-message-with-source interaction-response-types)
-           :data {:content (let [opts (:options (:data interaction))
-                                 high (:value (:max opts))
-                                 low (or (:value (:min opts)) 1)
-                                 amount (min (or (:value (:amount opts)) 1) (- high low))
-                                 ;; It would be nice to call (shuffle ...) or (rand-int ...) here, but they're both not
-                                 ;; lazy. `random-sample` is lazy, but still has to determine if the probability has
-                                 ;; been met. Since the probability depends on the input from the user, more numbers
-                                 ;; will be considered the wider the gap. Unfortunately, this is the result of lazy
-                                 ;; sequences being logical lists (no good way to get an element at an index).
-                                 nums (take amount (random-sample (* (/ 1 (- high low)) amount 1.5)
-                                                                  (c/range low (inc high))))]
-                             (if (seq nums)
-                               (str (str/join " " nums) (let [rem (- amount (count nums))]
-                                                          (if-not (= 0 rem)
-                                                            (str " (" (ds.fmt/bold rem)
-                                                                 " number" (if-not (= 1 rem) \s) " missing)"))))
-                               "No numbers."))}))
-
 (defn ^:command server
   "Gets information about the server."
   [conn interaction]
