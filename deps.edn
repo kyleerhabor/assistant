@@ -6,11 +6,9 @@
         ch.qos.logback/logback-classic {:mvn/version "1.2.7"}
         ch.qos.logback/logback-core {:mvn/version "1.2.7"}
         cheshire/cheshire {:mvn/version "5.10.1"}
-        com.xtdb/xtdb-core {:mvn/version "1.19.0"}
-        com.xtdb/xtdb-rocksdb {:mvn/version "1.19.0"}
-        compact-uuids/compact-uuids {:mvn/version "0.2.0"}
-        ;; Used by clj-http to decode response bodies.
-        clj-http/clj-http {:mvn/version "3.12.3"}
+        clj-http/clj-http {:mvn/version "3.12.3"} ; Used by clj-http to decode response bodies.
+        datascript/datascript {:mvn/version "1.3.1"}
+        datascript-transit/datascript-transit {:mvn/version "0.3.0"}
         hickory/hickory {:mvn/version "0.7.1"}
         org.slf4j/slf4j-api {:mvn/version "1.7.32"}
         org.suskalo/discljord {:mvn/version "1.3.0-RC2"}

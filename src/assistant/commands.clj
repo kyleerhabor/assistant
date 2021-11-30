@@ -15,6 +15,7 @@
             [clojure.walk :refer [postwalk]]
             [assistant.db :as db]
             [clj-http.client :as http]
+            [datascript.core :as d]
             [discljord.cdn :as ds.cdn]
             [discljord.formatting :as ds.fmt]
             [discljord.messaging :refer [bulk-delete-messages! create-interaction-response!
@@ -24,8 +25,7 @@
             [discljord.permissions :as ds.p]
             [hickory.core :as hick]
             [hickory.select :as hick.s]
-            [tick.core :as tick]
-            [xtdb.api :as xt]))
+            [tick.core :as tick]))
 
 (defn respond
   "Responds to an interaction with the connection, ID, and token supplied."
@@ -159,52 +159,38 @@
                                                                    \)))
                                                      :inline true}))})]})))
 
-(defn tagq
-  "Searches for a tag by its name and the bound environment. `env` should be a map with a :guild or :user key."
-  [name env]
-  (xt/q (xt/db db/node) '{:find [(pull ?e [:xt/id :tag/name :tag/content])]
-                          :in [?name ?guild ?user]
-                          :where [[?e :tag/name ?name]
-                                  (or (and [?e :tag/guild ?guild]
-                                           [(any? ?user)])
-                                      (and [?e :tag/user ?user]
-                                           [(any? ?guild)]))]} name (:guild env) (:user env)))
+(defn tagq*
+  "Queries the database for a tag by its `name`. `env` should be either `:tag/guild` or `:tag/user` with `id` being used
+   to match the value."
+  [name env id]
+  (d/q '[:find (pull ?e [:db/id :tag/name :tag/content]) .
+         :in $ ?name ?env ?id
+         :where [?e :tag/name ?name]
+                [?e ?env ?id]] (db/read) name env id))
+
+(defn tagq [name interaction]
+  (tagq* name (if (:guild-id interaction)
+               :tag/guild
+               :tag/user) (or (:guild-id interaction) (:id (:user interaction)))))
 
 (defn tag-autocomplete
   "Handles tag autocompletion searching by name."
-  [conn interaction name env]
+  [conn interaction name]
   (respond conn interaction 8
-           :data {:choices (for [tag (xt/q (xt/db db/node)
-                                           '{:find [?tag-name]
-                                             :in [?name ?guild ?user]
-                                             :where [[?e :tag/name ?tag-name]
-                                                     [(clojure.string/lower-case ?tag-name) ?lower-tag-name]
-                                                     [(clojure.string/includes? ?lower-tag-name ?name)]
-                                                     (or (and [?e :tag/guild ?guild]
-                                                              [(any? ?user)])
-                                                         (and [?e :tag/user ?user]
-                                                              [(any? ?guild)]))]
-                                             :limit 25}
-                                           (str/lower-case name) (:guild env) (:user env))
-                                 :let [tag (first tag)]]
-                             {:name tag
-                              :value tag})}))
-
-(defn tag-env
-  "Formats an interaction suitable for a tag environment (guild > user)."
-  [interaction]
-  {:guild (:guild-id interaction)
-   :user (:id (:user interaction))})
+           :data {:choices (let [tag (tagq name interaction)]
+                             ;; TODO: Introduce proper autocompletion.
+                             [{:name tag
+                               :value tag}])}))
 
 (defn tag-get
   "Subcommand for retrieving a tag by name."
   [conn interaction]
-  (let [env (tag-env interaction)
-        name (:name (:options (:get (:options (:data interaction)))))]
+  (println interaction)
+  (let [name (:name (:options (:get (:options (:data interaction)))))]
     (if (:focused name)
-      (tag-autocomplete conn interaction (:value name) env)
+      (tag-autocomplete conn interaction (:value name))
       (respond conn interaction (:channel-message-with-source interaction-response-types)
-               :data (if-let [tag (first (first (tagq (:value name) env)))]
+               :data (if-let [tag (tagq (:value name) interaction)]
                        {:embeds [{:title (:tag/name tag)
                                   :description (:tag/content tag)}]}
                        {:content "Tag not found."})))))
@@ -212,30 +198,30 @@
 (defn tag-create
   "Subcommand for creating a tag with a name and content."
   [conn interaction]
-  (let [env (tag-env interaction)
-        opts (:options (:create (:options (:data interaction))))
-        name (:value (:name opts))
-        content (:value (:content opts))]
-    (respond conn interaction (:channel-message-with-source interaction-response-types)
-             :data {:content (if (seq (tagq name (tag-env interaction)))
-                               "Tag already exists."
-                               (do (xt/submit-tx-async db/node [[::xt/put (cond-> {:xt/id (db/id)
-                                                                                   :tag/name name
-                                                                                   :tag/content content}
-                                                                            (:guild env) (assoc :tag/guild (:guild env))
-                                                                            (:user env) (assoc :tag/user (:user env)))]])
-                                   "Tag created."))})))
+  (go
+    (let [opts (:options (:create (:options (:data interaction))))
+          name (:value (:name opts))
+          content (:value (:content opts))]
+      (respond conn interaction (:channel-message-with-source interaction-response-types)
+               :data {:content (if (tagq name interaction)
+                                 "Tag already exists."
+                                 (do (db/transact [(let [gid (:guild-id interaction)
+                                                         uid (:id (:user interaction))]
+                                                     (cond-> {:tag/name name
+                                                              :tag/content content}
+                                                       gid (assoc :tag/guild gid)
+                                                       uid (assoc :tag/user uid)))])
+                                     "Tag created."))}))))
 
 (defn tag-delete
   "Subcommand for deleting a tag by name."
   [conn interaction]
-  (let [env (tag-env interaction)
-        name (:name (:options (:delete (:options (:data interaction)))))]
+  (let [name (:name (:options (:delete (:options (:data interaction)))))]
     (if (:focused name)
-      (tag-autocomplete conn interaction (:value name) env)
+      (tag-autocomplete conn interaction (:value name))
       (respond conn interaction (:channel-message-with-source interaction-response-types)
-               :data {:content (if-let [tag (first (first (tagq (:value name) env)))]
-                                 (do (xt/submit-tx-async db/node [[::xt/delete (:xt/id tag)]])
+               :data {:content (if-let [tag (tagq (:value name) interaction)]
+                                 (do (db/transact [[:db.fn/retractEntity (:db/id tag)]])
                                      "Tag deleted.")
                                  "Tag not found.")}))))
 
