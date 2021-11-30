@@ -185,7 +185,6 @@
 (defn tag-get
   "Subcommand for retrieving a tag by name."
   [conn interaction]
-  (println interaction)
   (let [name (:name (:options (:get (:options (:data interaction)))))]
     (if (:focused name)
       (tag-autocomplete conn interaction (:value name))
