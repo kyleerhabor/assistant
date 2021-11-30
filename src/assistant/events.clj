@@ -23,7 +23,9 @@
     ;; is checked separately.
     (if-let [name (or (:name (:data interaction))
                       (:name (:interaction (:message interaction))))]
-      ((:fn ((keyword name) commands)) conn (update interaction :data options->map)))))
+      (try ((:fn ((keyword name) commands)) conn (update interaction :data options->map))
+           (catch Exception e
+             (log/error "Failed to execute command:" e))))))
 
 (defmethod handler :ready
   [_ _ data]
