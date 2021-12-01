@@ -115,6 +115,43 @@
       (respond conn interaction (:channel-message-with-source interaction-response-types)
                :data {:content "Missing Manage Messages permission."}))))
 
+(defn ^:command range
+  "Picks a random number from a range."
+  {:options [{:type (:integer command-option-types)
+              :name "max"
+              :description "The highest number."
+              :required true}
+             {:type (:integer command-option-types)
+              :name "min"
+              :description "The lowest number (defaults to 1)."}
+             {:type (:integer command-option-types)
+              :name "amount"
+              :description "The amount of numbers to pick (defaults to 1). May return less than requested."
+              :min_value 1}]}
+  [conn interaction]
+  (respond conn interaction (:channel-message-with-source interaction-response-types)
+           :data {:content (let [opts (:options (:data interaction))
+                                 high (:value (:max opts))
+                                 low (or (:value (:min opts)) 1)
+                                 ;; The output would've been clamped by 600, so there's no point in collecting the total
+                                 ;; beyond that.
+                                 amount (min 600 (or (:value (:amount opts)) 1))
+                                 s (str/join " " (if (>= amount (- high low))
+                                                   ;; There's no point in running the randomizer (loop) if we know all
+                                                   ;; the numbers. Unfortunately, this optimization trick isn't useful
+                                                   ;; for values lower (e.g. 99 of 100).
+                                                   (c/range low (inc high))
+                                                   (let [amount (min amount (- high low))]
+                                                     (sort (loop [nums #{}]
+                                                             (if (= amount (count nums))
+                                                               nums
+                                                               (recur (conj nums (+ (long (rand (- (inc high) low)))
+                                                                                    low)))))))))]
+                             (cond
+                               (= 0 (count s)) "No numbers."
+                               (< 2000 (count s)) (str (subs s 0 1997) "...")
+                               :else s))}))
+
 (defn ^:command server
   "Gets information about the server."
   [conn interaction]
