@@ -63,39 +63,22 @@
 
 (defn ^:command ban
   "Bans a user."
-  {:options [{:type (:user command-option-types)
-              :name "user"
-              :description "The user to ban."
-              :required true}
-             {:type (:string command-option-types)
-              :name "reason"
-              :description "The reason for the ban."}
-             {:type (:integer command-option-types)
-              :name "seconds"
-              :description "The number of seconds to ban the user for."}
-             {:type (:integer command-option-types)
-              :name "minutes"
-              :description "The number of minutes to ban the user for."}
-             {:type (:integer command-option-types)
-              :name "hours"
-              :description "The number of hours to ban the user for."}
-             {:type (:integer command-option-types)
-              :name "days"
-              :description "The number of days to ban the user for."}
-             {:type (:integer command-option-types)
-              :name "weeks"
-              :description "The number of weeks to ban the user for."}
-             {:type (:integer command-option-types)
-              :name "months"
-              :description "The number of months to ban the user for."}
-             {:type (:integer command-option-types)
-              :name "years"
-              :description "The number of years to ban the user for."}
-             #_{:type (:integer command-option-types)
-              :name "messages"
-              :description "Deletes messages younger than the number of days specified."
-              :min_value 1
-              :max_value 7}]}
+  {:options (apply conj [{:type (:user command-option-types)
+                          :name "user"
+                          :description "The user to ban."
+                          :required true}
+                         {:type (:string command-option-types)
+                          :name "reason"
+                          :description "The reason for the ban."}
+                         ;; This option is probably confusing to users.
+                         {:type (:integer command-option-types)
+                          :name "messages"
+                          :description "Deletes messages younger than the number of days specified."
+                          :min_value 1
+                          :max_value 7}] (for [unit [:seconds :minutes :hours :days :weeks :months :years]]
+                                             {:type (:integer command-option-types)
+                                              :name unit
+                                              :description (str "The number of " (name unit) " to ban the user for.")}))}
   [conn interaction]
   (go
     (let [user (interaction->value interaction :user)
@@ -112,17 +95,10 @@
                      minutes (tick/+ (tick/new-duration minutes :minutes))
                      hours (tick/+ (tick/new-duration hours :hours))
                      days (tick/+ (tick/new-duration days :days))
-                     weeks (tick/+ (tick/new-duration (tick/days (* 7 weeks)) :days))
-                     months (tick/+ (tick/new-duration (tick/months months) :days))
-                     years (tick/+ (tick/new-duration years :days)))
-          #_(tick/+ (ban-duration interaction :seconds)
-                           (ban-duration interaction :minutes)
-                           (ban-duration interaction :hours)
-                           (ban-duration interaction :days)
-                           (ban-duration interaction :weeks)
-                           (ban-duration interaction :months)
-                           (ban-duration interaction :years))
-          #_message-days #_(interaction->value interaction :user)]
+                     weeks (tick/+ (tick/new-duration (* 7 weeks) :days))
+                     months (tick/+ (tick/new-duration (* 30 months) :days))
+                     years (tick/+ (tick/new-duration (* 365 years) :days)))
+          message-days (interaction->value interaction :user)]
       (<! (create-guild-ban! conn (:guild-id interaction) user
                              :audit-reason reason))
       (respond conn interaction (:channel-message-with-source interaction-response-types)
@@ -413,8 +389,7 @@
                                                                  {:label answer
                                                                   :value answer})}]}]}))))))
 
-(def wm-user-agent
-  "A user agent string conforming to the [Wikimedia User-Agent policy](https://meta.wikimedia.org/wiki/User-Agent_policy)."
+(defonce wm-user-agent
   (str "AssistantBot/1.2.0 (https://github.com/KyleErhabor/assistant; kyleerhabor@gmail.com)"
        " Clojure/" (clojure-version) ";"
        " clj-http/" (-> (edn/read-string (slurp "deps.edn"))

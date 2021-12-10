@@ -5,7 +5,9 @@
             [datascript.core :as d]
             [datascript.transit :as dt]))
 
-(defn write [db]
+(defn write
+  "Writes to the database file."
+  [db]
   (with-open [stream (io/output-stream "db.json")]
     (dt/write-transit db stream)))
 
