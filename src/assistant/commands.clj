@@ -27,6 +27,9 @@
             [hickory.select :as hick.s]
             [tick.core :as tick]))
 
+(defn interaction->value [interaction k]
+  (:value (k (:options (:data interaction)))))
+
 (defn respond
   "Responds to an interaction with the connection, ID, and token supplied."
   [conn interaction & args]
@@ -55,27 +58,75 @@
     (respond conn interaction (:channel-message-with-source interaction-response-types)
              :data {:content (ds.cdn/resize (ds.cdn/effective-user-avatar user) size)})))
 
+(defn ban-duration [interaction units]
+  (tick/new-period (or (interaction->value interaction units) 0) units))
+
 (defn ^:command ban
   "Bans a user."
   {:options [{:type (:user command-option-types)
               :name "user"
               :description "The user to ban."
               :required true}
-             {:type (:integer command-option-types)
-              :name "message-days"
-              :description "Deletes messages younger than the number of days specified."
-              :min_value 1
-              :max_value 7}
              {:type (:string command-option-types)
               :name "reason"
-              :description "The reason for the ban."}]}
+              :description "The reason for the ban."}
+             {:type (:integer command-option-types)
+              :name "seconds"
+              :description "The number of seconds to ban the user for."}
+             {:type (:integer command-option-types)
+              :name "minutes"
+              :description "The number of minutes to ban the user for."}
+             {:type (:integer command-option-types)
+              :name "hours"
+              :description "The number of hours to ban the user for."}
+             {:type (:integer command-option-types)
+              :name "days"
+              :description "The number of days to ban the user for."}
+             {:type (:integer command-option-types)
+              :name "weeks"
+              :description "The number of weeks to ban the user for."}
+             {:type (:integer command-option-types)
+              :name "months"
+              :description "The number of months to ban the user for."}
+             {:type (:integer command-option-types)
+              :name "years"
+              :description "The number of years to ban the user for."}
+             #_{:type (:integer command-option-types)
+              :name "messages"
+              :description "Deletes messages younger than the number of days specified."
+              :min_value 1
+              :max_value 7}]}
   [conn interaction]
-  (let [user (:value (:user (:options (:data interaction))))
-        message-days (:value (:message-days (:options (:data interaction))))
-        reason (:value (:reason (:options (:data interaction))))]
-    (create-guild-ban! conn (:guild-id interaction) user
-                       :delete-message-days message-days
-                       :audit-reason reason)))
+  (go
+    (let [user (interaction->value interaction :user)
+          reason (interaction->value interaction :reason)
+          seconds (interaction->value interaction :seconds)
+          minutes (interaction->value interaction :minutes)
+          hours (interaction->value interaction :hours)
+          days (interaction->value interaction :days)
+          weeks (interaction->value interaction :weeks)
+          months (interaction->value interaction :months)
+          years (interaction->value interaction :years)
+          duration (cond-> (tick/new-duration 0 :seconds)
+                     seconds (tick/+ (tick/new-duration seconds :seconds))
+                     minutes (tick/+ (tick/new-duration minutes :minutes))
+                     hours (tick/+ (tick/new-duration hours :hours))
+                     days (tick/+ (tick/new-duration days :days))
+                     weeks (tick/+ (tick/new-duration (tick/days (* 7 weeks)) :days))
+                     months (tick/+ (tick/new-duration (tick/months months) :days))
+                     years (tick/+ (tick/new-duration years :days)))
+          #_(tick/+ (ban-duration interaction :seconds)
+                           (ban-duration interaction :minutes)
+                           (ban-duration interaction :hours)
+                           (ban-duration interaction :days)
+                           (ban-duration interaction :weeks)
+                           (ban-duration interaction :months)
+                           (ban-duration interaction :years))
+          #_message-days #_(interaction->value interaction :user)]
+      (<! (create-guild-ban! conn (:guild-id interaction) user
+                             :audit-reason reason))
+      (respond conn interaction (:channel-message-with-source interaction-response-types)
+               :data {:content "Banned."}))))
 
 (defn ^:command purge
   "Deletes messages from a channel."
@@ -194,7 +245,7 @@
   (d/q '[:find (pull ?e ?patterns) .
          :in $ ?patterns ?name ?env ?id
          :where [?e :tag/name ?name]
-                [?e ?env ?id]] (db/read) patterns name env id))
+                [?e ?env ?id]] @db/conn patterns name env id))
 
 (defn tagq-args [q interaction]
   (q (if (:guild-id interaction)
@@ -209,12 +260,14 @@
   "Handles tag autocompletion searching by name."
   [conn interaction name]
   (respond conn interaction 8
-           :data {:choices (for [name (tagq-args (partial d/q '[:find [?tag-name ...]
-                                                                :in $ ?name ?env ?id
-                                                                :where [?e :tag/name ?tag-name]
-                                                                       [?e ?env ?id]
-                                                                       [(clojure.string/lower-case ?tag-name) ?lower-tag-name]
-                                                                       [(clojure.string/includes? ?lower-tag-name ?name)]] (db/read) (str/lower-case name))
+           :data {:choices (for [name (tagq-args (partial d/q
+                                                          '[:find [?tag-name ...]
+                                                            :in $ ?name ?env ?id
+                                                            :where [?e :tag/name ?tag-name]
+                                                                   [?e ?env ?id]
+                                                                   [(clojure.string/lower-case ?tag-name) ?lower-tag-name]
+                                                                   [(clojure.string/includes? ?lower-tag-name ?name)]]
+                                                          @db/conn (str/lower-case name))
                                                  interaction)]
                              {:name name
                               :value name})}))
@@ -241,12 +294,12 @@
       (respond conn interaction (:channel-message-with-source interaction-response-types)
                :data {:content (if (tagq name interaction [])
                                  "Tag already exists."
-                                 (do (db/transact [(let [gid (:guild-id interaction)
-                                                         uid (:id (:user interaction))]
-                                                     (cond-> {:tag/name name
-                                                              :tag/content content}
-                                                       gid (assoc :tag/guild gid)
-                                                       uid (assoc :tag/user uid)))])
+                                 (do (d/transact! db/conn [(let [gid (:guild-id interaction)
+                                                                 uid (:id (:user interaction))]
+                                                             (cond-> {:tag/name name
+                                                                      :tag/content content}
+                                                               gid (assoc :tag/guild gid)
+                                                               uid (assoc :tag/user uid)))])
                                      "Tag created."))}))))
 
 (defn tag-delete
@@ -257,7 +310,7 @@
       (tag-autocomplete conn interaction (:value name))
       (respond conn interaction (:channel-message-with-source interaction-response-types)
                :data {:content (if-let [tag (tagq (:value name) interaction [:db/id])]
-                                 (do (db/transact [[:db.fn/retractEntity (:db/id tag)]])
+                                 (do (d/transact! db/conn [[:db.fn/retractEntity (:db/id tag)]])
                                      "Tag deleted.")
                                  "Tag not found.")}))))
 
@@ -418,9 +471,7 @@
                (let [meta (meta v)]
                  (if (:command meta)
                    (assoc m (keyword k) (-> meta
-                                            (select-keys [:autocomplete :channel_types :choices
-                                                          :default_permission :doc :max_value :min_value
-                                                          :options :required :type])
+                                            (select-keys [:default-permission :doc :options :required :type])
                                             (rename-keys {:doc :description})
                                             (assoc :fn v)))
                    m))) {} (ns-publics *ns*)))
