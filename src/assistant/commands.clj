@@ -415,7 +415,7 @@
 
 (def wm-user-agent
   "A user agent string conforming to the [Wikimedia User-Agent policy](https://meta.wikimedia.org/wiki/User-Agent_policy)."
-  (str "AssistantBot/1.1.0 (https://github.com/KyleErhabor/assistant; kyleerhabor@gmail.com)"
+  (str "AssistantBot/1.2.0 (https://github.com/KyleErhabor/assistant; kyleerhabor@gmail.com)"
        " Clojure/" (clojure-version) ";"
        " clj-http/" (-> (edn/read-string (slurp "deps.edn"))
                         :deps
