@@ -25,5 +25,4 @@
       (stop-connection! msg-ch)
       (disconnect-bot! conn-ch)
       (async/close! event-ch))
-    (log/error "No token provided"))
-  (shutdown-agents))
+    (log/error "No token provided")))

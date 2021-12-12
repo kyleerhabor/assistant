@@ -49,17 +49,13 @@
              {:type (:integer command-option-types)
               :name "size"
               :description "The maximum size of the avatar."
-              :choices (map #(identity {:name (str %)
-                                        :value %}) [16 32 64 128 256 512 1024 2048 4096])}]}
+              :choices (map #(zipmap [:name :value] (repeat %)) [16 32 64 128 256 512 1024 2048 4096])}]}
   [conn interaction]
   (let [user (get (:users (:resolved (:data interaction)))
                   (:value (:user (:options (:data interaction)))))
         size (or (:value (:size (:options (:data interaction)))) 4096)]
     (respond conn interaction (:channel-message-with-source interaction-response-types)
              :data {:content (ds.cdn/resize (ds.cdn/effective-user-avatar user) size)})))
-
-(defn ban-duration [interaction units]
-  (tick/new-period (or (interaction->value interaction units) 0) units))
 
 (defn ^:command ban
   "Bans a user."
@@ -83,6 +79,8 @@
   (go
     (let [user (interaction->value interaction :user)
           reason (interaction->value interaction :reason)
+          messages (interaction->value interaction :messages)
+          ;; Duration stuff.
           seconds (interaction->value interaction :seconds)
           minutes (interaction->value interaction :minutes)
           hours (interaction->value interaction :hours)
@@ -90,6 +88,7 @@
           weeks (interaction->value interaction :weeks)
           months (interaction->value interaction :months)
           years (interaction->value interaction :years)
+          ;; This sucks.
           duration (cond-> (tick/new-duration 0 :seconds)
                      seconds (tick/+ (tick/new-duration seconds :seconds))
                      minutes (tick/+ (tick/new-duration minutes :minutes))
@@ -97,12 +96,19 @@
                      days (tick/+ (tick/new-duration days :days))
                      weeks (tick/+ (tick/new-duration (* 7 weeks) :days))
                      months (tick/+ (tick/new-duration (* 30 months) :days))
-                     years (tick/+ (tick/new-duration (* 365 years) :days)))
-          message-days (interaction->value interaction :user)]
-      (<! (create-guild-ban! conn (:guild-id interaction) user
-                             :audit-reason reason))
+                     years (tick/+ (tick/new-duration (* 365 years) :days)))]
       (respond conn interaction (:channel-message-with-source interaction-response-types)
-               :data {:content "Banned."}))))
+               :data {:content (if (ds.p/has-permission-flag? :ban-members (:permissions (:member interaction)))
+                                 (if (<! (create-guild-ban! conn (:guild-id interaction) user
+                                                            :audit-reason reason
+                                                            :delete-message-days messages))
+                                   (do (d/transact! db/conn [(cond-> {:ban/user user
+                                                                      :ban/guild (:guild-id interaction)
+                                                                      :ban/timestamp (tick/instant)}
+                                                               (not (or (.isZero duration) (.isNegative duration))) (assoc :ban/duration duration))])
+                                       "Banned.")
+                                   "Ban failed.")
+                                 "Missing Ban Members permission.")}))))
 
 (defn ^:command purge
   "Deletes messages from a channel."
