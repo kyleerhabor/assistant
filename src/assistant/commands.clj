@@ -29,14 +29,19 @@
 
 (defn option->option
   [data & [k & more]]
-  (if-let [option (k (:options data))]
+  ;; Using (get ... k) instead of (k ...) to avoid callers triggering an error when providing no arguments.
+  (if-let [option (get (:options data) k)]
     (if more
       (recur option more)
       option)))
 
+(defn interaction->option
+  [interaction & ks]
+  (apply option->option (:data interaction) ks))
+
 (defn interaction->value
   [interaction & ks]
-  (:value (apply option->option (:data interaction) ks)))
+  (:value (apply interaction->option interaction ks)))
 
 (defn respond
   "Responds to an interaction with the connection, ID, and token supplied."
@@ -67,22 +72,23 @@
 
 (defn ^:command ban
   "Bans a user."
-  {:options (apply conj [{:type (:user command-option-types)
-                          :name "user"
-                          :description "The user to ban."
-                          :required true}
-                         {:type (:string command-option-types)
-                          :name "reason"
-                          :description "The reason for the ban."}
+  {:options (concat [{:type (:user command-option-types)
+                      :name "user"
+                      :description "The user to ban."
+                      :required true}
+                     {:type (:string command-option-types)
+                      :name "reason"
+                      :description "The reason for the ban."}
                          ;; This option is probably confusing to users.
-                         {:type (:integer command-option-types)
-                          :name "messages"
-                          :description "Deletes messages younger than the number of days specified."
-                          :min_value 1
-                          :max_value 7}] (for [unit [:seconds :minutes :hours :days :weeks :months :years]]
-                                             {:type (:integer command-option-types)
-                                              :name unit
-                                              :description (str "The number of " (name unit) " to ban the user for.")}))}
+                     {:type (:integer command-option-types)
+                      :name "messages"
+                      :description "Deletes messages younger than the number of days specified."
+                      :min_value 1
+                      :max_value 7}]
+                    (for [unit [:seconds :minutes :hours :days :weeks :months :years]]
+                      {:type (:integer command-option-types)
+                       :name unit
+                       :description (str "The number of " (name unit) " to ban the user for.")}))}
   [conn interaction]
   (go
     (let [user (interaction->value interaction :user)
@@ -248,7 +254,7 @@
 (defn tag-autocomplete
   "Handles tag autocompletion searching by name."
   [conn interaction name]
-  (respond conn interaction 8
+  (respond conn interaction (:application-command-autocomplete-result interaction-response-types)
            :data {:choices (for [name (tagq-args (partial d/q
                                                           '[:find [?tag-name ...]
                                                             :in $ ?name ?env ?id
@@ -264,7 +270,7 @@
 (defn tag-get
   "Subcommand for retrieving a tag by name."
   [conn interaction]
-  (let [name (option->option (:data interaction) :get :name)]
+  (let [name (interaction->option interaction :get :name)]
     (if (:focused name)
       (tag-autocomplete conn interaction (:value name))
       (respond conn interaction (:channel-message-with-source interaction-response-types)
@@ -293,7 +299,7 @@
 (defn tag-delete
   "Subcommand for deleting a tag by name."
   [conn interaction]
-  (let [name (:name (:options (:delete (:options (:data interaction)))))]
+  (let [name (interaction->option interaction :delete :name)]
     (if (:focused name)
       (tag-autocomplete conn interaction (:value name))
       (respond conn interaction (:channel-message-with-source interaction-response-types)
