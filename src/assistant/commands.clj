@@ -27,8 +27,16 @@
             [hickory.select :as hick.s]
             [tick.core :as tick]))
 
-(defn interaction->value [interaction k]
-  (:value (k (:options (:data interaction)))))
+(defn option->option
+  [data & [k & more]]
+  (if-let [option (k (:options data))]
+    (if more
+      (recur option more)
+      option)))
+
+(defn interaction->value
+  [interaction & ks]
+  (:value (apply option->option (:data interaction) ks)))
 
 (defn respond
   "Responds to an interaction with the connection, ID, and token supplied."
@@ -52,8 +60,8 @@
               :choices (map #(zipmap [:name :value] (repeat %)) [16 32 64 128 256 512 1024 2048 4096])}]}
   [conn interaction]
   (let [user (get (:users (:resolved (:data interaction)))
-                  (:value (:user (:options (:data interaction)))))
-        size (or (:value (:size (:options (:data interaction)))) 4096)]
+                  (interaction->value interaction :user))
+        size (or (interaction->value interaction :size) 4096)]
     (respond conn interaction (:channel-message-with-source interaction-response-types)
              :data {:content (ds.cdn/resize (ds.cdn/effective-user-avatar user) size)})))
 
@@ -125,8 +133,8 @@
   [conn interaction]
   (go
     (if (ds.p/has-permission-flag? :manage-messages (:permissions (:member interaction)))
-      (let [amount (:value (:amount (:options (:data interaction))))
-            user (:value (:user (:options (:data interaction))))
+      (let [amount (interaction->value interaction :amount)
+            user (interaction->value interaction :user)
             msgs (transduce (comp (filter #(>= 14 (tick/days (tick/between (tick/instant (:timestamp %))
                                                                            (tick/instant)))))
                                   (filter (complement :pinned))
@@ -163,12 +171,11 @@
               :min_value 1}]}
   [conn interaction]
   (respond conn interaction (:channel-message-with-source interaction-response-types)
-           :data {:content (let [opts (:options (:data interaction))
-                                 high (:value (:max opts))
-                                 low (or (:value (:min opts)) 1)
+           :data {:content (let [high (interaction->value interaction :max)
+                                 low (or (interaction->value interaction :min) 1)
                                  ;; The output would've been clamped by 600, so there's no point in collecting the total
                                  ;; beyond that.
-                                 amount (min 600 (or (:value (:amount opts)) 1))
+                                 amount (min 600 (or (interaction->value interaction :amount) 1))
                                  s (str/join " " (if (>= amount (- high low))
                                                    ;; There's no point in running the randomizer (loop) if we know all
                                                    ;; the numbers. Unfortunately, this optimization trick isn't useful
@@ -257,7 +264,7 @@
 (defn tag-get
   "Subcommand for retrieving a tag by name."
   [conn interaction]
-  (let [name (:name (:options (:get (:options (:data interaction)))))]
+  (let [name (option->option (:data interaction) :get :name)]
     (if (:focused name)
       (tag-autocomplete conn interaction (:value name))
       (respond conn interaction (:channel-message-with-source interaction-response-types)
@@ -270,9 +277,8 @@
   "Subcommand for creating a tag with a name and content."
   [conn interaction]
   (go
-    (let [opts (:options (:create (:options (:data interaction))))
-          name (:value (:name opts))
-          content (:value (:content opts))]
+    (let [name (interaction->value interaction :create :name)
+          content (interaction->value interaction :create :content)]
       (respond conn interaction (:channel-message-with-source interaction-response-types)
                :data {:content (if (tagq name interaction [])
                                  "Tag already exists."
@@ -360,9 +366,9 @@
                                                    "Wrong. 😔")))
                       :flags (bit-shift-left 1 6)}
                      (let [res (chan)
-                           category (:value (:category (:options (:data interaction))))
-                           difficulty (:value (:difficulty (:options (:data interaction))))
-                           type (:value (:type (:options (:data interaction))))]
+                           category (interaction->value interaction :category)
+                           difficulty (interaction->value interaction :difficulty)
+                           type (interaction->value interaction :type)]
                        (http/get "https://opentdb.com/api.php"
                                  {:as :json
                                   :async? true
@@ -428,7 +434,7 @@
   [conn interaction]
   (go
     (let [res (chan)
-          query (:value (:query (:options (:data interaction))))]
+          query (interaction->value interaction :query)]
       (http/get "https://en.wikipedia.org/w/api.php" {:as :json
                                                       :async? true
                                                       :headers {:User-Agent wm-user-agent}

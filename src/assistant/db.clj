@@ -9,6 +9,7 @@
             [datascript.transit :as dt]
             [time-literals.read-write :as tl.rw]))
 
+;; Borrowed from pipeline-transit (https://github.com/Motiva-AI/pipeline-transit) since the definitions were private.
 (def time-classes
   {'period Period
    'date LocalDate
@@ -25,13 +26,17 @@
    'day-of-week DayOfWeek
    'month Month})
 
+(def time-write-handlers
+  (reduce-kv #(assoc %1 %3 (transit/write-handler (str "time/" (name %2)) str)) {} time-classes))
+
+(def time-read-handlers
+  (reduce-kv #(assoc %1 (str "time/" (name %2)) (transit/read-handler %3)) {} tl.rw/tags))
+
 (def write-handlers
-  (merge dt/write-handlers
-         (reduce-kv #(assoc %1 %3 (transit/write-handler (str "time/" (name %2)) str)) {} time-classes)))
+  (merge dt/write-handlers time-write-handlers))
 
 (def read-handlers
-  (merge dt/read-handlers
-         (reduce-kv #(assoc %1 (str "time/" (name %2)) (transit/read-handler %3)) {} tl.rw/tags)))
+  (merge dt/read-handlers time-read-handlers))
 
 (defn write
   "Writes to the database file."
