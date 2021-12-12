@@ -4,46 +4,46 @@
   (:refer-clojure :exclude [read])
   (:require [clojure.java.io :as io]
             [clojure.tools.logging :as log]
-            [cognitect.transit :as t]
+            [cognitect.transit :as transit]
             [datascript.core :as d]
             [datascript.transit :as dt]
             [time-literals.read-write :as tl.rw]))
 
 (def time-classes
-  {'period           Period
-   'date             LocalDate
-   'date-time        LocalDateTime
-   'zoned-date-time  ZonedDateTime
-   'offset-time      OffsetTime
-   'instant          Instant
+  {'period Period
+   'date LocalDate
+   'date-time LocalDateTime
+   'zoned-date-time ZonedDateTime
+   'offset-time OffsetTime
+   'instant Instant
    'offset-date-time OffsetDateTime
-   'time             LocalTime
-   'duration         Duration
-   'year             Year
-   'year-month       YearMonth
-   'zone             ZoneId
-   'day-of-week      DayOfWeek
-   'month            Month})
+   'time LocalTime
+   'duration Duration
+   'year Year
+   'year-month YearMonth
+   'zone ZoneId
+   'day-of-week DayOfWeek
+   'month Month})
 
 (def write-handlers
   (merge dt/write-handlers
-         (reduce-kv #(assoc %1 %3 (t/write-handler (str "time/" (name %2)) str)) {} time-classes)))
+         (reduce-kv #(assoc %1 %3 (transit/write-handler (str "time/" (name %2)) str)) {} time-classes)))
 
 (def read-handlers
   (merge dt/read-handlers
-         (reduce-kv #(assoc %1 (str "time/" (name %2)) (t/read-handler %3)) {} tl.rw/tags)))
+         (reduce-kv #(assoc %1 (str "time/" (name %2)) (transit/read-handler %3)) {} tl.rw/tags)))
 
 (defn write
   "Writes to the database file."
   [db]
   (with-open [stream (io/output-stream "db.json")]
-    (t/write (t/writer stream :json {:handlers write-handlers}) db)))
+    (transit/write (transit/writer stream :json {:handlers write-handlers}) db)))
 
 (defn read
   "Reads the database file."
   []
   (with-open [stream (io/input-stream "db.json")]
-    (t/read (t/reader stream :json {:handlers read-handlers}))))
+    (transit/read (transit/reader stream :json {:handlers read-handlers}))))
 
 (defonce conn (d/conn-from-db (let [file (io/file "db.json")]
                                 (when-not (.exists file)
