@@ -1,20 +1,20 @@
 {:paths ["src" "resources"]
  :jvm-opts ["-Dclojure.tools.logging.factory=clojure.tools.logging.impl/slf4j-factory"]
  :deps {org.clojure/clojure {:mvn/version "1.10.3"}
-        org.clojure/core.async {:mvn/version "1.5.644"}
-        org.clojure/tools.logging {:mvn/version "1.2.1"}
-        ch.qos.logback/logback-classic {:mvn/version "1.2.7"}
-        ch.qos.logback/logback-core {:mvn/version "1.2.7"}
+        org.clojure/core.async {:mvn/version "1.5.648"}
+        org.clojure/tools.logging {:mvn/version "1.2.3"}
+        ch.qos.logback/logback-classic {:mvn/version "1.2.10"}
+        ch.qos.logback/logback-core {:mvn/version "1.2.10"}
         cheshire/cheshire {:mvn/version "5.10.1"} ; Used by clj-http to decode response bodies.
         clj-http/clj-http {:mvn/version "3.12.3"}
         com.cognitect/transit-clj {:mvn/version "1.0.324"}
-        datascript/datascript {:mvn/version "1.3.2"}
+        datascript/datascript {:mvn/version "1.3.4"}
         datascript-transit/datascript-transit {:mvn/version "0.3.0"}
         hickory/hickory {:mvn/version "0.7.1"}
         org.slf4j/slf4j-api {:mvn/version "1.7.32"}
         org.suskalo/discljord {:mvn/version "1.3.0"}
         tick/tick {:mvn/version "0.5.0-RC5"}
         time-literals/time-literals {:mvn/version "0.1.5"}}
- :aliases {:build {:deps {io.github.clojure/tools.build {:git/tag "v0.6.8"
+ :aliases {:build {:deps {io.github.clojure/tools.build {:git/tag "v0.7.4"
                                                          :git/sha "d79ae84"}}
                    :ns-default build}}}

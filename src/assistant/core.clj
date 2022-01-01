@@ -26,3 +26,5 @@
       (disconnect-bot! conn-ch)
       (async/close! event-ch))
     (log/error "No token provided")))
+
+(-main (slurp "token.txt"))
