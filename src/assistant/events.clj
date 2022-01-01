@@ -17,7 +17,7 @@
 (defmulti handler
   "Handler for Discord API events."
   (fn [_ type data]
-    (u/log ::event :type type :data data)
+    (u/log ::event :type type)
     type))
 
 (defmethod handler :interaction-create
@@ -29,7 +29,7 @@
     ;; is checked separately.
     (if-let [name (or (:name (:data interaction))
                       (:name (:interaction (:message interaction))))]
-      (ignore-ex (u/trace ::interaction [:name name]
+      (ignore-ex (u/trace ::interaction-run [:name name]
                    ((:fn ((keyword name) commands)) conn (update interaction :data options->map)))))))
 
 (defmethod handler :ready

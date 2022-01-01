@@ -13,20 +13,22 @@
 
 (set! *warn-on-reflection* true)
 
-(defonce stop (u/start-publisher! {:type :console}))
+(defonce stop (u/start-publisher! {:type :multi
+                                   :publishers [{:type :console}
+                                                {:type :simple-file
+                                                 :filename "./logs/mulog.log"}]}))
 
 (defn -main [& configs]
-  (let [config (apply merge-with into (map (comp edn/read-string slurp) configs))
+  (let [{:keys [token guild]} (apply merge-with into (map (comp edn/read-string slurp) configs))
         event-ch (chan)
-        conn-ch (connect-bot! (:token config) event-ch
+        conn-ch (connect-bot! token event-ch
                               :intents #{})
-        msg-ch (start-connection! (:token config))
+        msg-ch (start-connection! token)
         id (:id @(get-current-application-information! msg-ch))]
     (u/log ::global-commands-set :commands @(bulk-overwrite-global-application-commands! msg-ch id discord-commands))
-    (if-let [guild (:guild config)]
-      (u/log ::guild-commands-set
-             :commands @(bulk-overwrite-guild-application-commands! msg-ch id guild discord-commands)
-             :guild guild))
+    (and guild (u/log ::guild-commands-set
+                      :commands @(bulk-overwrite-guild-application-commands! msg-ch id guild discord-commands)
+                      :guild guild))
     (message-pump! event-ch #(go (handler msg-ch %1 %2)))
     (stop-connection! msg-ch)
     (disconnect-bot! conn-ch)
