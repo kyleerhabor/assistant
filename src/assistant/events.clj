@@ -1,7 +1,11 @@
 (ns assistant.events
-  (:require [clojure.tools.logging :as log]
-            [assistant.commands :refer [commands]]
+  (:require [assistant.commands :refer [commands]]
+            [com.brunobonacci.mulog :as u]
             [discljord.formatting :as fmt]))
+
+(defmacro ignore-ex [& body]
+  `(try ~@body
+     (catch Exception _#)))
 
 (defn options->map
   "Recursively transforms `m` to convert `:options` keys from vectors of maps to just maps."
@@ -12,7 +16,9 @@
 
 (defmulti handler
   "Handler for Discord API events."
-  (fn [_ type _] type))
+  (fn [_ type data]
+    (u/log ::event :type type :data data)
+    type))
 
 (defmethod handler :interaction-create
   [conn _ interaction]
@@ -23,14 +29,12 @@
     ;; is checked separately.
     (if-let [name (or (:name (:data interaction))
                       (:name (:interaction (:message interaction))))]
-      (try ((:fn ((keyword name) commands)) conn (update interaction :data options->map))
-           (catch Exception e
-             (log/error "Failed to execute command:" e))))))
+      (ignore-ex (u/trace ::interaction [:name name]
+                   ((:fn ((keyword name) commands)) conn (update interaction :data options->map)))))))
 
 (defmethod handler :ready
   [_ _ data]
-  (log/info (str "Connected as " (fmt/user-tag (:user data))
-                 " (" (-> data :user :id) " | Shard: " (first (:shard data)) \))))
+  (u/log ::bot-ready :id (:id (:user data)) :shard (:shard data)))
 
 (defmethod handler :default
   [_ _ _])
