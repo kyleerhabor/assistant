@@ -4,7 +4,7 @@
 
 A Discord bot to assist my everyday needs.
 
-[Invite (Private)](https://discord.com/api/oauth2/authorize?client_id=856158596344709130&permissions=8192&scope=applications.commands%20bot)
+[Invite (Private)](https://discord.com/api/oauth2/authorize?client_id=937051045253754931&permissions=8192&scope=applications.commands%20bot)
 
 ## Rationale
 

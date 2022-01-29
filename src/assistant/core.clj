@@ -33,3 +33,8 @@
     (stop-connection! msg-ch)
     (disconnect-bot! conn-ch)
     (async/close! event-ch)))
+
+
+
+(comment
+  (-main "config.edn" "secrets.edn"))

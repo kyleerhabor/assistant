@@ -1,7 +1,6 @@
 (ns assistant.events
   (:require [assistant.commands :refer [commands]]
-            [com.brunobonacci.mulog :as u]
-            [discljord.formatting :as fmt]))
+            [com.brunobonacci.mulog :as u]))
 
 (defmacro ignore-ex [& body]
   `(try ~@body
@@ -16,7 +15,7 @@
 
 (defmulti handler
   "Handler for Discord API events."
-  (fn [_ type data]
+  (fn [_ type _]
     (u/log ::event :type type)
     type))
 
