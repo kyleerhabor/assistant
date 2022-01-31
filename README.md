@@ -29,7 +29,7 @@ parameters, autocompletion, etc.) while only showing the details that matter. As
 makes traditional commands and interactions appealing to users and developers and I hope you enjoy its design
 philosophy.
 
-*- Klay#7753*
+*- Satellite#0652*
 
 ## Installing
 

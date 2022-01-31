@@ -8,24 +8,24 @@
    tag-get rather than tag-?-get."
   (:refer-clojure :exclude [range])
   (:require [clojure.core :as c]
-            [clojure.core.async :refer [>! <! chan go timeout]]
-            [clojure.edn :as edn]
-            [clojure.set :refer [rename-keys]]
-            [clojure.string :as str]
-            [clojure.walk :refer [postwalk]]
-            [assistant.db :as db]
-            [clj-http.client :as http]
-            [datascript.core :as d]
-            [discljord.cdn :as ds.cdn]
-            [discljord.formatting :as ds.fmt]
-            [discljord.messaging :refer [bulk-delete-messages! create-guild-ban! create-interaction-response!
-                                         delete-message! delete-original-interaction-response! get-guild!
-                                         get-channel-messages!]]
-            [discljord.messaging.specs :refer [command-option-types interaction-response-types]]
-            [discljord.permissions :as ds.p]
-            [hickory.core :as hick]
-            [hickory.select :as hick.s]
-            [tick.core :as tick]))
+    [clojure.core.async :refer [>! <! chan go timeout]]
+    [clojure.edn :as edn]
+    [clojure.set :refer [rename-keys]]
+    [clojure.string :as str]
+    [clojure.walk :refer [postwalk]]
+    [assistant.db :as db]
+    [clj-http.client :as http]
+    [datascript.core :as d]
+    [discljord.cdn :as ds.cdn]
+    [discljord.formatting :as ds.fmt]
+    [discljord.messaging :refer [bulk-delete-messages! create-guild-ban! create-interaction-response!
+                                 delete-message! delete-original-interaction-response! get-guild!
+                                 get-channel-messages! get-user!]]
+    [discljord.messaging.specs :refer [command-option-types interaction-response-types]]
+    [discljord.permissions :as ds.p]
+    [hickory.core :as hick]
+    [hickory.select :as hick.s]
+    [tick.core :as tick]))
 
 (defn option->option
   [data & [k & more]]
@@ -65,10 +65,10 @@
               :choices (map #(zipmap [:name :value] (repeat %)) [16 32 64 128 256 512 1024 2048 4096])}]}
   [conn interaction]
   (let [user (get (:users (:resolved (:data interaction)))
-                  (interaction->value interaction :user))
+               (interaction->value interaction :user))
         size (or (interaction->value interaction :size) 4096)]
     (respond conn interaction (:channel-message-with-source interaction-response-types)
-             :data {:content (ds.cdn/resize (ds.cdn/effective-user-avatar user) size)})))
+      :data {:content (ds.cdn/resize (ds.cdn/effective-user-avatar user) size)})))
 
 (defn ^:command ban
   "Bans a user."
@@ -79,16 +79,16 @@
                      {:type (:string command-option-types)
                       :name "reason"
                       :description "The reason for the ban."}
-                         ;; This option is probably confusing to users.
+                     ;; This option is probably confusing to users.
                      {:type (:integer command-option-types)
                       :name "messages"
                       :description "Deletes messages younger than the number of days specified."
                       :min_value 1
                       :max_value 7}]
-                    (for [unit [:seconds :minutes :hours :days :weeks :months :years]]
-                      {:type (:integer command-option-types)
-                       :name unit
-                       :description (str "The number of " (name unit) " to ban the user for.")}))}
+              (for [unit [:seconds :minutes :hours :days :weeks :months :years]]
+                {:type (:integer command-option-types)
+                 :name unit
+                 :description (str "The number of " (name unit) " to ban the user for.")}))}
   [conn interaction]
   (go
     (let [user (interaction->value interaction :user)
@@ -112,17 +112,17 @@
                      months (tick/+ (tick/new-duration (* 30 months) :days))
                      years (tick/+ (tick/new-duration (* 365 years) :days)))]
       (respond conn interaction (:channel-message-with-source interaction-response-types)
-               :data {:content (if (ds.p/has-permission-flag? :ban-members (:permissions (:member interaction)))
-                                 (if (<! (create-guild-ban! conn (:guild-id interaction) user
-                                                            :audit-reason reason
-                                                            :delete-message-days messages))
-                                   (do (d/transact! db/conn [(cond-> {:ban/user user
-                                                                      :ban/guild (:guild-id interaction)
-                                                                      :ban/timestamp (tick/instant)}
-                                                               (not (or (.isZero duration) (.isNegative duration))) (assoc :ban/duration duration))])
-                                       "Banned.")
-                                   "Ban failed.")
-                                 "Missing Ban Members permission.")}))))
+        :data {:content (if (ds.p/has-permission-flag? :ban-members (:permissions (:member interaction)))
+                          (if (<! (create-guild-ban! conn (:guild-id interaction) user
+                                    :audit-reason reason
+                                    :delete-message-days messages))
+                            (do (d/transact! db/conn [(cond-> {:ban/user user
+                                                               :ban/guild (:guild-id interaction)
+                                                               :ban/timestamp (tick/instant)}
+                                                        (not (or (.isZero duration) (.isNegative duration))) (assoc :ban/duration duration))])
+                              "Banned.")
+                            "Ban failed.")
+                          "Missing Ban Members permission.")}))))
 
 (defn ^:command purge
   "Deletes messages from a channel."
@@ -142,25 +142,25 @@
       (let [amount (interaction->value interaction :amount)
             user (interaction->value interaction :user)
             msgs (transduce (comp (filter #(>= 14 (tick/days (tick/between (tick/instant (:timestamp %))
-                                                                           (tick/instant)))))
-                                  (filter (complement :pinned))
-                                  (filter #(or (nil? user) (= user (:id (:author %)))))
-                                  (map :id))
-                            conj
-                            (<! (get-channel-messages! conn (:channel-id interaction)
-                                                       :limit amount)))]
+                                                               (tick/instant)))))
+                              (filter (complement :pinned))
+                              (filter #(or (nil? user) (= user (:id (:author %)))))
+                              (map :id))
+                   conj
+                   (<! (get-channel-messages! conn (:channel-id interaction)
+                         :limit amount)))]
         (when (<! (respond conn interaction (:channel-message-with-source interaction-response-types)
-                           :data {:content (or (case (count msgs)
-                                                 0 "No messages to purge."
-                                                 1 (if (<! (delete-message! conn (:channel-id interaction) (first msgs)))
-                                                     "Deleted one message.")
-                                                 (if (<! (bulk-delete-messages! conn (:channel-id interaction) msgs))
-                                                   "Purge successful."))
-                                               "Purge failed.")}))
+                    :data {:content (or (case (count msgs)
+                                          0 "No messages to purge."
+                                          1 (if (<! (delete-message! conn (:channel-id interaction) (first msgs)))
+                                              "Deleted one message.")
+                                          (if (<! (bulk-delete-messages! conn (:channel-id interaction) msgs))
+                                            "Purge successful."))
+                                      "Purge failed.")}))
           (<! (timeout 2000))
           (delete-original-interaction-response! conn (:application-id interaction) (:token interaction))))
       (respond conn interaction (:channel-message-with-source interaction-response-types)
-               :data {:content "Missing Manage Messages permission."}))))
+        :data {:content "Missing Manage Messages permission."}))))
 
 (defn ^:command range
   "Picks a random number from a range."
@@ -177,61 +177,61 @@
               :min_value 1}]}
   [conn interaction]
   (respond conn interaction (:channel-message-with-source interaction-response-types)
-           :data {:content (let [high (interaction->value interaction :max)
-                                 low (or (interaction->value interaction :min) 1)
-                                 ;; The output would've been clamped by 600, so there's no point in collecting the total
-                                 ;; beyond that.
-                                 amount (min 600 (or (interaction->value interaction :amount) 1))
-                                 s (str/join " " (if (>= amount (- high low))
-                                                   ;; There's no point in running the randomizer (loop) if we know all
-                                                   ;; the numbers. Unfortunately, this optimization trick isn't useful
-                                                   ;; for values lower (e.g. 99 of 100).
-                                                   (c/range low (inc high))
-                                                   (let [amount (min amount (- high low))]
-                                                     (sort (loop [nums #{}]
-                                                             (if (= amount (count nums))
-                                                               nums
-                                                               (recur (conj nums (+ (long (rand (- (inc high) low)))
-                                                                                    low)))))))))]
-                             (cond
-                               (= 0 (count s)) "No numbers."
-                               (< 2000 (count s)) (str (subs s 0 1997) "...")
-                               :else s))}))
+    :data {:content (let [high (interaction->value interaction :max)
+                          low (or (interaction->value interaction :min) 1)
+                          ;; The output would've been clamped by 600, so there's no point in collecting the total
+                          ;; beyond that.
+                          amount (min 600 (or (interaction->value interaction :amount) 1))
+                          s (str/join " " (if (>= amount (- high low))
+                                            ;; There's no point in running the randomizer (loop) if we know all
+                                            ;; the numbers. Unfortunately, this optimization trick isn't useful
+                                            ;; for values lower (e.g. 99 of 100).
+                                            (c/range low (inc high))
+                                            (let [amount (min amount (- high low))]
+                                              (sort (loop [nums #{}]
+                                                      (if (= amount (count nums))
+                                                        nums
+                                                        (recur (conj nums (+ (long (rand (- (inc high) low)))
+                                                                            low)))))))))]
+                      (cond
+                        (= 0 (count s)) "No numbers."
+                        (< 2000 (count s)) (str (subs s 0 1997) "...")
+                        :else s))}))
 
 (defn ^:command server
   "Gets information about the server."
   [conn interaction]
   (go
     (respond conn interaction (:channel-message-with-source interaction-response-types)
-             :data {:embeds [(let [guild (<! (get-guild! conn (:guild-id interaction)
-                                                         :with-counts true))
-                                   afk (:afk-channel-id guild)]
-                               {:title (:name guild)
-                                :url (:vanity-url-code guild)
-                                :description (:description guild)
-                                :thumbnail {:url (resize-image (ds.cdn/guild-icon guild))}
-                                :image {:url (resize-image (ds.cdn/guild-banner guild))}
-                                :fields (cond-> [{:name "Owner"
-                                                  :value (ds.fmt/mention-user (:owner-id guild))
-                                                  :inline true}
-                                                 {:name "Members"
-                                                  :value (str "~" (:approximate-member-count guild))
-                                                  :inline true}
-                                                 {:name "Roles"
-                                                  :value (count (:roles guild))
-                                                  :inline true}
-                                                 {:name "Emojis"
-                                                  :value (count (:emojis guild))
-                                                  :inline true}]
-                                          afk (conj {:name "AFK Channel"
-                                                     :value (let [mins (tick/minutes (tick/new-duration (:afk-timeout guild) :seconds))]
-                                                              (str (ds.fmt/mention-channel afk)
-                                                                   " ("
-                                                                   (if (= mins 60)
-                                                                     "1 hour"
-                                                                     (str mins " minute" (if-not (= mins 1) \s)))
-                                                                   \)))
-                                                     :inline true}))})]})))
+      :data {:embeds [(let [guild (<! (get-guild! conn (:guild-id interaction)
+                                        :with-counts true))
+                            afk (:afk-channel-id guild)]
+                        {:title (:name guild)
+                         :url (:vanity-url-code guild)
+                         :description (:description guild)
+                         :thumbnail {:url (resize-image (ds.cdn/guild-icon guild))}
+                         :image {:url (resize-image (ds.cdn/guild-banner guild))}
+                         :fields (cond-> [{:name "Owner"
+                                           :value (ds.fmt/mention-user (:owner-id guild))
+                                           :inline true}
+                                          {:name "Members"
+                                           :value (str "~" (:approximate-member-count guild))
+                                           :inline true}
+                                          {:name "Roles"
+                                           :value (count (:roles guild))
+                                           :inline true}
+                                          {:name "Emojis"
+                                           :value (count (:emojis guild))
+                                           :inline true}]
+                                   afk (conj {:name "AFK Channel"
+                                              :value (let [mins (tick/minutes (tick/new-duration (:afk-timeout guild) :seconds))]
+                                                       (str (ds.fmt/mention-channel afk)
+                                                         " ("
+                                                         (if (= mins 60)
+                                                           "1 hour"
+                                                           (str mins " minute" (if-not (= mins 1) \s)))
+                                                         \)))
+                                              :inline true}))})]})))
 
 (defn tagq*
   "Queries the database for a tag by its `name`. `env` should be either `:tag/guild` or `:tag/user` with `id` being used
@@ -240,7 +240,7 @@
   (d/q '[:find (pull ?e ?patterns) .
          :in $ ?patterns ?name ?env ?id
          :where [?e :tag/name ?name]
-                [?e ?env ?id]] @db/conn patterns name env id))
+         [?e ?env ?id]] @db/conn patterns name env id))
 
 (defn tagq-args [q interaction]
   (q (if (:guild-id interaction)
@@ -255,17 +255,17 @@
   "Handles tag autocompletion searching by name."
   [conn interaction name]
   (respond conn interaction (:application-command-autocomplete-result interaction-response-types)
-           :data {:choices (for [name (tagq-args (partial d/q
-                                                          '[:find [?tag-name ...]
-                                                            :in $ ?name ?env ?id
-                                                            :where [?e :tag/name ?tag-name]
-                                                                   [?e ?env ?id]
-                                                                   [(clojure.string/lower-case ?tag-name) ?lower-tag-name]
-                                                                   [(clojure.string/includes? ?lower-tag-name ?name)]]
-                                                          @db/conn (str/lower-case name))
-                                                 interaction)]
-                             {:name name
-                              :value name})}))
+    :data {:choices (for [name (tagq-args (partial d/q
+                                            '[:find [?tag-name ...]
+                                              :in $ ?name ?env ?id
+                                              :where [?e :tag/name ?tag-name]
+                                              [?e ?env ?id]
+                                              [(clojure.string/lower-case ?tag-name) ?lower-tag-name]
+                                              [(clojure.string/includes? ?lower-tag-name ?name)]]
+                                            @db/conn (str/lower-case name))
+                                 interaction)]
+                      {:name name
+                       :value name})}))
 
 (defn tag-get
   "Subcommand for retrieving a tag by name."
@@ -274,10 +274,10 @@
     (if (:focused name)
       (tag-autocomplete conn interaction (:value name))
       (respond conn interaction (:channel-message-with-source interaction-response-types)
-               :data (if-let [tag (tagq (:value name) interaction [:tag/name :tag/content])]
-                       {:embeds [{:title (:tag/name tag)
-                                  :description (:tag/content tag)}]}
-                       {:content "Tag not found."})))))
+        :data (if-let [tag (tagq (:value name) interaction [:tag/name :tag/content])]
+                {:embeds [{:title (:tag/name tag)
+                           :description (:tag/content tag)}]}
+                {:content "Tag not found."})))))
 
 (defn tag-create
   "Subcommand for creating a tag with a name and content."
@@ -286,15 +286,15 @@
     (let [name (interaction->value interaction :create :name)
           content (interaction->value interaction :create :content)]
       (respond conn interaction (:channel-message-with-source interaction-response-types)
-               :data {:content (if (tagq name interaction [])
-                                 "Tag already exists."
-                                 (do (d/transact! db/conn [(let [gid (:guild-id interaction)
-                                                                 uid (:id (:user interaction))]
-                                                             (cond-> {:tag/name name
-                                                                      :tag/content content}
-                                                               gid (assoc :tag/guild gid)
-                                                               uid (assoc :tag/user uid)))])
-                                     "Tag created."))}))))
+        :data {:content (if (tagq name interaction [])
+                          "Tag already exists."
+                          (do (d/transact! db/conn [(let [gid (:guild-id interaction)
+                                                          uid (:id (:user interaction))]
+                                                      (cond-> {:tag/name name
+                                                               :tag/content content}
+                                                        gid (assoc :tag/guild gid)
+                                                        uid (assoc :tag/user uid)))])
+                            "Tag created."))}))))
 
 (defn tag-delete
   "Subcommand for deleting a tag by name."
@@ -303,10 +303,10 @@
     (if (:focused name)
       (tag-autocomplete conn interaction (:value name))
       (respond conn interaction (:channel-message-with-source interaction-response-types)
-               :data {:content (if-let [tag (tagq (:value name) interaction [:db/id])]
-                                 (do (d/transact! db/conn [[:db.fn/retractEntity (:db/id tag)]])
-                                     "Tag deleted.")
-                                 "Tag not found.")}))))
+        :data {:content (if-let [tag (tagq (:value name) interaction [:db/id])]
+                          (do (d/transact! db/conn [[:db.fn/retractEntity (:db/id tag)]])
+                            "Tag deleted.")
+                          "Tag not found.")}))))
 
 (defn ^:command tag
   "Facilities for getting and managing message responses."
@@ -344,8 +344,8 @@
     :delete (tag-delete conn interaction)))
 
 (defonce trivia-categories (reduce #(assoc %1 (:name %2) (:id %2)) {}
-                                   ;; In case Open Trivia DB adds more than 25.
-                                   (take 25 (:trivia_categories (:body (http/get "https://opentdb.com/api_category.php" {:as :json}))))))
+                             ;; In case Open Trivia DB adds more than 25.
+                             (take 25 (:trivia_categories (:body (http/get "https://opentdb.com/api_category.php" {:as :json}))))))
 
 (defn ^:command trivia
   "Runs a trivia."
@@ -364,56 +364,68 @@
   [conn interaction]
   (go
     (respond conn interaction (:channel-message-with-source interaction-response-types)
-             :data (if (= 3 (:type interaction))
-                     {:content (let [data (:data interaction)
-                                     answer (first (:values data))]
-                                 (str answer "—" (if (= answer (:custom-id data))
-                                                   "Correct! 🎉"
-                                                   "Wrong. 😔")))
-                      :flags (bit-shift-left 1 6)}
-                     (let [res (chan)
-                           category (interaction->value interaction :category)
-                           difficulty (interaction->value interaction :difficulty)
-                           type (interaction->value interaction :type)]
-                       (http/get "https://opentdb.com/api.php"
-                                 {:as :json
-                                  :async? true
-                                  :query-params {:amount 1
-                                                 :category (trivia-categories category)
-                                                 :difficulty (if difficulty
-                                                               (str/lower-case difficulty))
-                                                 :type (case type
-                                                         "Multiple Choice" "multiple"
-                                                         "True/False" "boolean"
-                                                         nil)}}
-                                 #(go (>! res %))
-                                 (constantly nil))
-                       (let [trivia (first (:results (postwalk #(if (string? %)
-                                                                  ;; For some reason, Open Trivia DB corrupts the HTML
-                                                                  ;; entity encoding.
-                                                                  (.text (first (hick/parse-fragment (str/replace % "amp;" ""))))
-                                                                  %) (:body (<! res)))))]
-                         {:content (:question trivia)
-                          :components [{:type 1
-                                        :components [{:type 3
-                                                      :custom_id (:correct_answer trivia)
-                                                      :options (for [answer (if (= "boolean" (:type trivia))
-                                                                              ;; It's often annoying to have boolean
-                                                                              ;; answers shuffled, so we're going to
-                                                                              ;; keep them in the same order. If you've
-                                                                              ;; ever played Kahoot, you know the pain.
-                                                                              ["True" "False"]
-                                                                              (shuffle (conj (:incorrect_answers trivia) (:correct_answer trivia))))]
-                                                                 {:label answer
-                                                                  :value answer})}]}]}))))))
+      :data (if (= 3 (:type interaction))
+              {:content (let [data (:data interaction)
+                              answer (first (:values data))]
+                          (str answer "—" (if (= answer (:custom-id data))
+                                            "Correct! 🎉"
+                                            "Wrong. 😔")))
+               :flags (bit-shift-left 1 6)}
+              (let [res (chan)
+                    category (interaction->value interaction :category)
+                    difficulty (interaction->value interaction :difficulty)
+                    type (interaction->value interaction :type)]
+                (http/get "https://opentdb.com/api.php"
+                  {:as :json
+                   :async? true
+                   :query-params {:amount 1
+                                  :category (trivia-categories category)
+                                  :difficulty (if difficulty
+                                                (str/lower-case difficulty))
+                                  :type (case type
+                                          "Multiple Choice" "multiple"
+                                          "True/False" "boolean"
+                                          nil)}}
+                  #(go (>! res %))
+                  (constantly nil))
+                (let [trivia (first (:results (postwalk #(if (string? %)
+                                                           ;; For some reason, Open Trivia DB corrupts the HTML
+                                                           ;; entity encoding.
+                                                           (.text (first (hick/parse-fragment (str/replace % "amp;" ""))))
+                                                           %) (:body (<! res)))))]
+                  {:content (:question trivia)
+                   :components [{:type 1
+                                 :components [{:type 3
+                                               :custom_id (:correct_answer trivia)
+                                               :options (for [answer (if (= "boolean" (:type trivia))
+                                                                       ;; It's often annoying to have boolean
+                                                                       ;; answers shuffled, so we're going to
+                                                                       ;; keep them in the same order. If you've
+                                                                       ;; ever played Kahoot, you know the pain.
+                                                                       ["True" "False"]
+                                                                       (shuffle (conj (:incorrect_answers trivia) (:correct_answer trivia))))]
+                                                          {:label answer
+                                                           :value answer})}]}]}))))))
+
+(defn ^:command user
+  "Displays a user's tag. Useful for user IDs."
+  {:options [{:type (:user command-option-types)
+              :name "user"
+              :description "The user to retrieve the tag of."
+              :required true}]}
+  [conn interaction]
+  (go
+    (let [user (get (:users (:resolved (:data interaction))) (interaction->value interaction :user))]
+      (respond conn interaction (:channel-message-with-source interaction-response-types)
+        :data {:content (ds.fmt/user-tag user)}))))
 
 (defonce wm-user-agent
   (str "AssistantBot/1.2.0 (https://github.com/KyleErhabor/assistant; kyleerhabor@gmail.com)"
-       " Clojure/" (clojure-version) ";"
-       " clj-http/" (-> (edn/read-string (slurp "deps.edn"))
-                        :deps
-                        ('clj-http/clj-http)
-                        :mvn/version)))
+    " Clojure/" (clojure-version) ";"
+    " clj-http/" (-> (edn/read-string (slurp "deps.edn"))
+                   :deps
+                   ('clj-http/clj-http)
+                   :mvn/version)))
 
 (defn wp-snippet-content
   "Converts HTML in an article snippet into Markdown. Currently only transforms `<span class=searchmatch ...>` into
@@ -423,13 +435,13 @@
               (if (instance? org.jsoup.nodes.TextNode fragment)
                 (str fragment)
                 (->> fragment
-                     hick/as-hickory
-                     (hick.s/select (hick.s/child (hick.s/and (hick.s/tag :span)
-                                                     (hick.s/class :searchmatch))))
-                     first
-                     :content
-                     first
-                     ds.fmt/bold)))))
+                  hick/as-hickory
+                  (hick.s/select (hick.s/child (hick.s/and (hick.s/tag :span)
+                                                 (hick.s/class :searchmatch))))
+                  first
+                  :content
+                  first
+                  ds.fmt/bold)))))
 
 (defn ^:command wikipedia
   "Searches Wikipedia."
@@ -449,13 +461,13 @@
                                                                      :list "search"
                                                                      :srsearch query
                                                                      :srnamespace 0}}
-                #(go (>! res %))
-                (constantly nil))
+        #(go (>! res %))
+        (constantly nil))
       (respond conn interaction (:channel-message-with-source interaction-response-types)
-               :data {:embeds [{:title "Results"
-                                :fields (for [result (:search (:query (:body (<! res))))]
-                                          {:name (:title result)
-                                           :value (wp-snippet-content (:snippet result))})}]}))))
+        :data {:embeds [{:title "Results"
+                         :fields (for [result (:search (:query (:body (<! res))))]
+                                   {:name (:title result)
+                                    :value (wp-snippet-content (:snippet result))})}]}))))
 
 (def commands
   "A map of keywordized command names to command details conforming to the [Create Global Application Command](https://discord.com/developers/docs/interactions/application-commands#create-global-application-command)
@@ -464,14 +476,14 @@
                (let [meta (meta v)]
                  (if (:command meta)
                    (assoc m (keyword k) (-> meta
-                                            (select-keys [:default-permission :doc :options :required :type])
-                                            (rename-keys {:doc :description})
-                                            (assoc :fn v)))
+                                          (select-keys [:default-permission :doc :options :required :type])
+                                          (rename-keys {:doc :description})
+                                          (assoc :fn v)))
                    m))) {} (ns-publics *ns*)))
 
 (def discord-commands
   "A vector of command maps conforming to the [Bulk Overwrite Global Application Commands](https://discord.com/developers/docs/interactions/application-commands#bulk-overwrite-global-application-commands)
    endpoint."
   (reduce-kv #(conj %1 (-> %3
-                           (assoc :name %2)
-                           (dissoc :fn))) [] commands))
+                         (assoc :name %2)
+                         (dissoc :fn))) [] commands))
