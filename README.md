@@ -33,7 +33,7 @@ philosophy.
 
 ## Invite
 
-As Assistant is privately hosted, there is no public instance to invite. Instead, you'll need to [install][installing]
+As Assistant is privately hosted, there is no public instance to invite. Instead, you'll need to [install](#installing)
 and invite your own. Use the following invite link, replacing `CLIENT_ID` with your bot's ID, to invite Assistant:
 `https://discord.com/api/oauth2/authorize?client_id=CLIENT_ID&permissions=8192&scope=applications.commands%20bot`
 
