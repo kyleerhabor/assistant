@@ -4,7 +4,7 @@
 
 A Discord bot to assist my everyday needs.
 
-[Invite (Private)](https://discord.com/api/oauth2/authorize?client_id=937051045253754931&permissions=8192&scope=applications.commands%20bot)
+[Invite (Private)](https://discord.com/api/oauth2/authorize?client_id=856158596344709130&permissions=8192&scope=applications.commands%20bot)
 
 ## Rationale
 
@@ -29,7 +29,13 @@ parameters, autocompletion, etc.) while only showing the details that matter. As
 makes traditional commands and interactions appealing to users and developers and I hope you enjoy its design
 philosophy.
 
-*- Satellite#0652*
+*- Klay#7753*
+
+## Invite
+
+As Assistant is privately hosted, there is no public instance to invite. Instead, you'll need to [install][installing]
+and invite your own. Use the following invite link, replacing `CLIENT_ID` with your bot's ID, to invite Assistant:
+`https://discord.com/api/oauth2/authorize?client_id=CLIENT_ID&permissions=8192&scope=applications.commands%20bot`
 
 ## Installing
 

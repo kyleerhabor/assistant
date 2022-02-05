@@ -1,10 +1,10 @@
 (ns assistant.events
-  (:require [assistant.commands :refer [commands]]
-            [com.brunobonacci.mulog :as u]))
-
-(defmacro ignore-ex [& body]
-  `(try ~@body
-     (catch Exception _#)))
+  (:require
+    [clojure.core.async :refer [<! go]]
+    [assistant.commands :refer [discord-commands commands]]
+    [assistant.utils :refer [ignore-ex]]
+    [com.brunobonacci.mulog :as u]
+    [discljord.messaging :refer [bulk-overwrite-global-application-commands!]]))
 
 (defn options->map
   "Recursively transforms `m` to convert `:options` keys from vectors of maps to just maps."
@@ -32,8 +32,18 @@
                    ((:fn ((keyword name) commands)) conn (update interaction :data options->map)))))))
 
 (defmethod handler :ready
-  [_ _ data]
-  (u/log ::bot-ready :id (:id (:user data)) :shard (:shard data)))
+  [conn _ data]
+  (let [appid (:id (:user data))]
+    (u/log ::ready :id appid :shard (:shard data))
+    (go
+      (u/log ::global-application-commands-set
+        :commands (<! (bulk-overwrite-global-application-commands! conn appid discord-commands)))
+      ))
+  #_(if-let [gid (:bot/guild-id config)]
+    (u/log ::guild-commands-set
+      ;; TODO: Only overwrite commands registered for guilds.
+      :commands @(bulk-overwrite-guild-application-commands! msg-ch id gid discord-commands)
+      :guild gid)))
 
 (defmethod handler :default
   [_ _ _])
