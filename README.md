@@ -20,16 +20,17 @@ and complexities of their former implementations. For example, an `/avatar` comm
 links to additional formats (PNG, JPEG, WebP, and GIF) and sizes, but this is often unnecessary as it adds more 
 information than the user needs. The user just wanted *some* image—not all of them in all their forms. The command 
 could've been written to use optional parameters, but traditional commands using named arguments (with dashes usually) 
-are notoriously difficult to comprehend, resulting in more consults to the help command. These anti-patterns are common 
-among bots of all sizes.
+are notoriously difficult to comprehend, resulting in more consults to the help command. Additionally, users needs to
+be aware of the relations between options and when they make sense in the current environment. Have you ever seen an
+option that works in a guild but not in a DM, or an option that behaves differently depending on the value of other
+options? These anti-patterns are common among bots of all sizes.
 
 I wanted a bot capable of providing a simple interface and experience, but couldn't find one I liked. In protest,
 Assistant was created to address those issues—first class support for application commands (subcommands, groups, typed
 parameters, autocompletion, etc.) while only showing the details that matter. Assistant's principles are based on what
-makes traditional commands and interactions appealing to users and developers and I hope you enjoy its design
-philosophy.
+makes traditional commands and interactions appealing to users and developers and I hope you enjoy its design philosophy.
 
-*- Klay#7753*
+*- Klay#0427*
 
 ## Invite
 
