@@ -3,11 +3,12 @@
             LocalTime Month Duration Year YearMonth])
   (:refer-clojure :exclude [read])
   (:require [clojure.java.io :as io]
-            [com.brunobonacci.mulog :as u]
             [cognitect.transit :as transit]
             [datascript.core :as d]
             [datascript.transit :as dt]
             [time-literals.read-write :as tl.rw]))
+
+;;; Handlers
 
 ;; Borrowed from pipeline-transit (https://github.com/Motiva-AI/pipeline-transit) since the definitions were private.
 (def time-classes {'period Period
@@ -37,14 +38,16 @@
 
 (def write-handlers (merge dt/write-handlers time-write-handlers))
 (def read-handlers (merge dt/read-handlers time-read-handlers))
+
+;;; Actual database reading and writing stuff
+
 (def schema {})
 
 (defn write
   "Writes to the database file."
   [db]
   (with-open [stream (io/output-stream "db.json")]
-    (transit/write (transit/writer stream :json {:handlers write-handlers}) db)
-    (u/log ::db-write)))
+    (transit/write (transit/writer stream :json {:handlers write-handlers}) db)))
 
 (defn create
   "Creates the database file if it doesn't exist."
@@ -52,16 +55,13 @@
   (let [file (io/file "db.json")]
     (when-not (.exists file)
       (.createNewFile file)
-      (write (d/empty-db schema))
-      (u/log ::db-create))))
+      (write (d/empty-db schema)))))
 
 (defn read
-  "Reads the database file."
+  "Reads the database file as edn."
   []
   (with-open [stream (io/input-stream "db.json")]
-    (let [db (transit/read (transit/reader stream :json {:handlers read-handlers}))]
-      (u/log ::db-read)
-      db)))
+    (transit/read (transit/reader stream :json {:handlers read-handlers}))))
 
 (defonce conn (d/conn-from-db (do (create)
                                   (read))))

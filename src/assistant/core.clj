@@ -3,13 +3,9 @@
     [clojure.core.async :as async :refer [chan go]]
     [clojure.edn :as edn]
     [assistant.events :refer [handler]]
-    [com.brunobonacci.mulog :as u]
     [discljord.connections :refer [connect-bot! disconnect-bot!]]
     [discljord.events :refer [message-pump!]]
     [discljord.messaging :refer [start-connection! stop-connection!]]))
-
-(defonce stop (u/start-publisher! {:type :multi
-                                   :publishers [{:type :console}]}))
 
 (defn read-config
   [files]
