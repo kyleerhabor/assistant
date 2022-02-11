@@ -41,8 +41,8 @@ and invite your own. Use the following invite link, replacing `CLIENT_ID` with y
 
 You can download the project from the [Releases](https://github.com/KyleErhabor/assistant/releases/latest) page.
 [Clojure](https://clojure.org/guides/getting_started) is required to build it. In the examples, the commands should be 
-run in the top-level directory of the project. `<token>` refers to the [Discord bot token](https://discord.com/developers/applications)
-the bot will use to authenticate.
+run in the top-level directory of the project. `<token>` refers to the
+[Discord bot token](https://discord.com/developers/applications) the bot will use to authenticate.
 
 ### Clojure
 
