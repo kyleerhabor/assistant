@@ -4,33 +4,29 @@
     [clojure.set :refer [rename-keys]]
     [clojure.string :as str]
     [assistant.interaction.anilist :as anilist]
-    [assistant.interaction.util :refer [image-sizes max-embed-description-length]]
-    [assistant.utils :refer [truncate split-keys]]
+    [assistant.interaction.util :refer [ephemeral image-sizes max-autocomplete-name-length]]
+    [assistant.utils :refer [hex->int split-keys truncate]]
+    [camel-snake-kebab.core :as csk]
     [cheshire.core :as che]
     [clj-http.client :as http]
     [discljord.cdn :as ds.cdn]
     [discljord.formatting :as ds.fmt]
-    [discljord.messaging :refer [create-interaction-response!]]
+    [discljord.messaging :refer [create-interaction-response! get-channel!]]
     [discljord.messaging.specs :refer [command-option-types interaction-response-types]]
-    [graphql-query.core :refer [graphql-query]]
-    [tick.core :as tick]))
+    [graphql-query.core :refer [graphql-query]]))
+
+(def kebab-kw (comp keyword csk/->kebab-case))
 
 (defn avatar-url [user size]
   (ds.cdn/resize (ds.cdn/effective-user-avatar user) size))
-
-(defn respond
-  [conn interaction & args]
-  (apply create-interaction-response! conn (:id interaction) (:token interaction) args))
-
-;;; Commands
 
 (defn request-async [options]
   (let [result (chan)
         options (assoc options :async? true)]
     (http/request options
       #(go (>! result %))
-      ;; In the event of an error, we'll just do nothing. `result` will park on take and, most likely, timeout the
-      ;; interaction.
+      ;; In the event of an error, we'll just do nothing. `result` will park on take and cause the interaction to
+      ;; timeout.
       (constantly nil))
     result))
 
@@ -41,181 +37,109 @@
                                         :body (che/generate-string {:query graphql})
                                         :content-type :json}))))))
 
-;; Intentionally excluding Japan since that'll be 99% of the anime.
-(def anilist-country-codes {"CN" "🇨🇳"
-                            "KR" "🇰🇷"
-                            "TW" "🇹🇼"})
-
-(defn format-fuzzy-date [day month year]
-  (if year
-    (if month
-      (let [month (str/capitalize (tick/month month))]
-        (str month (if day
-                     (str " " day)) ", " year))
-      ;; Just to be consistent with strings.
-      (str year))))
-
-(defn anilist-fuzzy-date [date]
-  (format-fuzzy-date (:day date) (:month date) (:year date)))
-
-(def anilist-media-formats {"TV" "TV"
-                            "TV_SHORT" "TV Short"
-                            "MOVIE" "Movie"
-                            "SPECIAL" "Special"
-                            "OVA" "OVA"
-                            "ONA" "ONA"
-                            "MUSIC" "Music"
-                            "MANGA" "Manga"
-                            "NOVEL" "Novel"
-                            "ONE_SHOT" "One Shot"})
-
-(def anilist-media-sources {"ORIGINAL" "Original"
-                            "MANGA" "Manga"
-                            "LIGHT_NOVEL" "Light Novel"
-                            "VISUAL_NOVEL" "Visual Novel"
-                            "VIDEO_GAME" "Video Game"
-                            "OTHER" "Other"
-                            "NOVEL" "Novel"
-                            "DOUJINSHI" "Doujinshi"
-                            "ANIME" "Anime"
-                            "WEB_NOVEL" "Web Novel"
-                            "LIVE_ACTION" "Live Action"
-                            "GAME" "Game"
-                            "COMIC" "Comic"
-                            ;; Would've been better for them to actually state the media (probably didn't for breaking
-                            ;; changes).
-                            "MULTIMEDIA_PROJECT" "Multimedia Project"
-                            "PICTURE_BOOK" "Picture Book"})
-
-(def anilist-media-statuses {"FINISHED" "Finished"
-                             "RELEASING" "Releasing"
-                             "NOT_YET_RELEASED" "Not Yet Released"
-                             "CANCELLED" "Canceled"
-                             "HIATUS" "Hiatus"})
-
-(def anilist-graphql-fuzzy-date [:day :month :year])
-
-(defn format-duration [n unit]
-  (str n " " unit (if (not= 1 n)
-                    \s)))
-
-(defn anime
-  [conn {{{{id :value} :query} :options} :data
-         :as interaction} _]
+(defn nsfw
+  "Returns a channel with a boolean indicating whether or not an interaction was run in an NSFW environment."
+  [conn interaction]
   (go
-    (let [data (<! (query-anilist (graphql-query {:queries [[:Media {:id id}
-                                                             [:averageScore :countryOfOrigin
-                                                              :description :duration :episodes :format :popularity
-                                                              :siteUrl :source :status
-                                                              [:startDate anilist-graphql-fuzzy-date]
-                                                              [:endDate anilist-graphql-fuzzy-date]
-                                                              [:coverImage
-                                                               [:color :extraLarge]]
-                                                              [:title
-                                                               [:english :romaji]]
-                                                              [:rankings
-                                                               [:allTime :rank :type]]
-                                                              [:externalLinks
-                                                               [:site :url]]]]]})))
-          media (:Media data)
-          cover-image (:coverImage media)
-          ;; Scores and popularity
-          score (:averageScore media)
-          popularity (:popularity media)
-          rank (fn [type]
-                 (first (filter #(and
-                                   (:allTime %)
-                                   (= type (:type %))) (:rankings media))))
-          scoreRank (rank "RATED")
-          popularityRank (rank "POPULAR")
-          ;; Other stuff
-          episodes (:episodes media)
-          source (:source media)
-          startDate (anilist-fuzzy-date (:startDate media))
-          endDate (anilist-fuzzy-date (:endDate media))]
+    (if-let [cid (:channel-id interaction)]
+      (or (:nsfw (<! (get-channel! conn cid))) false)
+      false)))
+
+(defn respond
+  [conn interaction & args]
+  (apply create-interaction-response! conn (:id interaction) (:token interaction) args))
+
+(comment
+  (def translate (partial assistant.i18n/translate :en-US)))
+
+;;; Commands
+
+(defn animanga [conn {{{{id :value} :query} :options} :data
+                      :as interaction} {translate :translator}]
+  (go
+    (let [body (<! (query-anilist (graphql-query {:queries [(anilist/media2 id)]})))
+          media (:Media body)
+          adult? (:isAdult media)]
       (respond conn interaction (:channel-message-with-source interaction-response-types)
-        :data {:embeds [{:title (str (anilist/media-title (:title media))
-                                  (if-let [flag (get anilist-country-codes (:countryOfOrigin media))]
-                                    (str " " flag)))
-                         :description (-> (:description media)
-                                        (str/replace #"</?b>" "**")
-                                        (str/replace #"<br>" "\n")
-                                        (str/replace #"</?i>" "*")
-                                        (str/replace #"[\r\n]+" "\n\n")
-                                        (truncate max-embed-description-length))
-                         :url (:siteUrl media)
-                         :thumbnail {:url (:extraLarge cover-image)}
-                         :color (if-let [color (:color cover-image)]
-                                  (Long/parseLong (subs color 1) 16))
-                         :fields (cond-> [{:name "Format"
-                                           :value (get anilist-media-formats (:format media))
-                                           :inline true}
-                                          {:name "Status"
-                                           :value (get anilist-media-statuses (:status media))
-                                           :inline true}]
-                                   episodes (conj {:name "Episodes"
-                                                   ;; <episode count> (<duration in hours> hours and <duration in
-                                                   ;; minutes> minutes long/each)
-                                                   :value (str episodes
-                                                            (if-let [duration (:duration media)]
-                                                              (str " ("
-                                                                (if (<= 60 duration)
-                                                                  (let [minutes (mod duration 60)]
-                                                                    (str (format-duration (long (/ duration 60)) "hour")
-                                                                      (if (< 0 minutes)
-                                                                        (str " and " (format-duration minutes "minute")))))
-                                                                  (format-duration duration "minute"))
-                                                                " " (if (= 1 episodes)
-                                                                      "long"
-                                                                      "each") ")")))
-                                                   :inline true})
-                                   (or score scoreRank) (conj {:name "Score"
-                                                               ;; <score>% (**#<rank>**)
-                                                               :value (let [score (if score
-                                                                                    (str score "%"))
-                                                                            rank (if scoreRank
-                                                                                   (ds.fmt/bold (str "#" (:rank scoreRank))))]
-                                                                        (if (and score rank)
-                                                                          (str score " (" rank ")")
-                                                                          (or score rank)))
-                                                               :inline true})
-                                   (or popularity popularityRank) (conj {:name "Popularity"
-                                                                         :value (let [score (if popularity
-                                                                                              (str (long (/ popularity 1000)) "k"))
-                                                                                      rank (if popularityRank
-                                                                                             (ds.fmt/bold (str "#" (:rank popularityRank))))]
-                                                                                  (if (and score rank)
-                                                                                    (str score " (" rank ")")
-                                                                                    (or score rank)))
-                                                                         :inline true})
-                                   source (conj {:name "Source"
-                                                 :value (get anilist-media-sources source)
-                                                 :inline true})
-                                   startDate (conj {:name "Start Date"
-                                                    :value startDate
-                                                    :inline true})
-                                   endDate (conj {:name "End Date"
-                                                  :value endDate
-                                                  :inline true})
-                                   true (conj {:name "Links"
-                                               ;; Could also write (comp (partial apply ds.fmt/embed-link) (juxt :site :url))
-                                               :value (str/join ", " (map #(ds.fmt/embed-link (:site %) (:url %))
-                                                                       (:externalLinks media)))}))}]}))))
+        :data (cond
+                (not media) {:content (translate :not-found)
+                             :flags ephemeral}
+                (and adult? (not (<! (nsfw conn interaction)))) {:content (translate (case (:type media)
+                                                                                       "ANIME" :nsfw-anime
+                                                                                       "MANGA" :nsfw-manga))
+                                                                 :flags ephemeral}
+                :else {:embeds [(let [cover-image (:coverImage media)
+                                      episodes (:episodes media)
+                                      chapters (:chapters media)
+                                      volumes (:volumes media)
+                                      rankings (:rankings media)
+                                      score (:averageScore media)
+                                      popularity (:popularity media)
+                                      source (:source media)
+                                      start-date (translate :fuzzy-date (:startDate media))
+                                      end-date (translate :fuzzy-date (:endDate media))
+                                      links (:externalLinks media)]
+                                  {:title (anilist/format-media-title media)
+                                   :description (some-> (:description media) anilist/format-media-description)
+                                   :url (:siteUrl media)
+                                   :thumbnail {:url (:extraLarge cover-image)}
+                                   :color (some-> (:color cover-image) hex->int)
+                                   :fields (cond-> [{:name (translate :format)
+                                                     :value (translate (kebab-kw (:format media)))
+                                                     :inline true}
+                                                    {:name (translate :status)
+                                                     :value (translate (kebab-kw (:status media)))
+                                                     :inline true}]
+                                             ;; Anime
+                                             episodes (conj {:name (translate :episodes)
+                                                             :value (translate :interaction.anime/episodes episodes (:duration media))
+                                                             :inline true})
 
-(defn anilist-media-autocomplete [conn {{{{query :value} :query} :options} :data
-                                        :as interaction} {:keys [type]}]
+                                             ;; Manga
+                                             chapters (conj {:name (translate :chapters)
+                                                             :value (translate :interaction.manga/chapters chapters (:volumes media))
+                                                             :inline true})
+                                             (and (not chapters) volumes) (conj {:name (translate :volumes)
+                                                                                 :value volumes
+                                                                                 :inline true})
+
+                                             ;; Others
+                                             score (conj {:name (translate :score)
+                                                          :value (translate :anilist.media/score score
+                                                                   (anilist/media-rank rankings "RATED"))
+                                                          :inline true})
+                                             popularity (conj {:name (translate :popularity)
+                                                               :value (translate :anilist.media/popularity popularity
+                                                                        (anilist/media-rank rankings "POPULAR"))
+                                                               :inline true})
+                                             source (conj {:name (translate :source)
+                                                           :value (translate (kebab-kw source))
+                                                           :inline true})
+                                             (seq start-date) (conj {:name (translate :start-date)
+                                                                     :value start-date
+                                                                     :inline true})
+                                             (seq end-date) (conj {:name (translate :end-date)
+                                                                   :value end-date
+                                                                   :inline true})
+                                             (seq links) (conj {:name (translate :links)
+                                                                :value (str/join ", " (map #(ds.fmt/embed-link (:site %) (:url %))
+                                                                                        links))}))})]})))))
+
+(defn animanga-autocomplete [conn {{{{query :value} :query} :options} :data
+                                   :as interaction} {translate :translator}]
   (go
-    (let [body (<! (query-anilist (graphql-query {:queries [(anilist/media-preview query type)]})))]
+    (let [body (<! (query-anilist (graphql-query {:queries [(anilist/media-preview2 query
+                                                              {:adult? (if-not (<! (nsfw conn interaction))
+                                                                         false)})]})))]
       (respond conn interaction (:application-command-autocomplete-result interaction-response-types)
         :data {:choices (for [media (:media (:Page body))]
-                          {:name (anilist/media-title (:title media))
+                          ;; NOTE: For English, the note should only be capitalized for abbreviations. Unfortunately,
+                          ;; way localization is set up forces everything to be capitalized. A minor annoyance that
+                          ;; should be fixed in the future.
+                          {:name (let [note (str " (" (translate (kebab-kw (:format media))) ")")]
+                                   (str (truncate (anilist/media-title (:title media)) (- max-autocomplete-name-length (count note)))
+                                     note))
                            :value (:id media)})}))))
-
-(defn anime-autocomplete [conn interaction options]
-  (anilist-media-autocomplete conn interaction (assoc options :type :ANIME)))
-
-(defn manga-autocomplete [conn interaction options]
-  (anilist-media-autocomplete conn interaction (assoc options :type :MANGA)))
 
 (defn avatar
   [conn {{{{user :value} :user
@@ -237,20 +161,17 @@
                           "Server: " (avatar-url member size))
                         user-url))}))
 
-(defn manga [conn interaction _]
-  )
-
 ;;; Command exportation (transformation) facilities.
 
 ;; The interaction commands. The key is the name and the value contains properties useful for dispatchers (e.g. `:fn`).
 ;; :options is an array of maps instead of a map of maps since the order matters to Discord.
-(def global-commands {:anime {:fn anime
-                              :description "Search for an anime."
-                              :options [{:type (:integer command-option-types)
-                                         :name "query"
-                                         :description "The anime to search for."
-                                         :required true
-                                         :autocomplete anime-autocomplete}]}
+(def global-commands {:animanga {:fn animanga
+                                 :description "Search for an anime or manga."
+                                 :options [{:type (:integer command-option-types)
+                                            :name "query"
+                                            :description "The anime or manga to search for."
+                                            :required true
+                                            :autocomplete animanga-autocomplete}]}
                       :avatar {:fn avatar
                                :description "Displays a user's avatar."
                                :options [{:type (:user command-option-types)
@@ -261,13 +182,7 @@
                                           :description "The maximum size of the avatar. May be lower if size is not available."
                                           :choices (map #(zipmap [:name :value] (repeat %)) image-sizes)}]}})
 
-(def guild-commands {:manga {:fn manga
-                             :description "Search for a manga."
-                             :options [{:type (:integer command-option-types)
-                                        :name "query"
-                                        :description "The manga to search for."
-                                        :required true
-                                        :autocomplete manga-autocomplete}]}})
+(def guild-commands {})
 
 (def command-keys [:name :description :options :default-permission :type])
 (def command-option-keys [:type :name :description :required :choices :options :channel-types :min-value :max-value
@@ -303,7 +218,7 @@
   (reduce-kv (fn [coll name command]
                (let [[command subs] (split-keys (normalize-command (normalize command name)) command-keys)]
                  (conj coll (if (seq subs)
-                              ;; If there are subcommands, there are no options to begin with. Therefore, it's safe to
+                              ;; If there are sub-commands, there are no options to begin with. Therefore, it's safe to
                               ;; `assoc` here.
                               (assoc command :options (transform-subs subs))
                               command)))) [] commands))

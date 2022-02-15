@@ -1,16 +1,90 @@
 (ns assistant.interaction.anilist
-  (:require [assistant.interaction.util :refer [max-autocomplete-choices]]))
+  (:require
+    [clojure.string :as str]
+    [assistant.interaction.util :refer [max-autocomplete-choices max-embed-description-length]]
+    [assistant.utils :refer [truncate]]
+    [camel-snake-kebab.core :as csk]
+    [discljord.formatting :as ds.fmt]))
 
-(defn media-title [title]
+(def country-codes {"JP" "🇯🇵"
+                    "CN" "🇨🇳"
+                    "KR" "🇰🇷"
+                    "TW" "🇹🇼"})
+
+(def kebab-kw (comp keyword csk/->kebab-case))
+
+(defn html-to-md
+  "Converts common HTML in AniList to Markdown."
+  [html]
+  (-> html
+    ;; Very basic and susceptible to failure, but "works".
+    (str/replace #"\r|<br>" "\n")
+    (str/replace #"</?i>" "*")
+    (str/replace #"</?b>" "**")
+    (str/replace #"\n{3,}" "\n\n")))
+
+(defn media-title
+  "Returns the title of a media, favoring english over romaji."
+  [title]
   ;; We could use `some`, but it would break when `title` is nil.
   ((some-fn :english :romaji) title))
 
+(defn media-rank [rankings type]
+  (:rank (first (filter #(and
+                           (:allTime %)
+                           (= type (:type %))) rankings))))
+
+;;; Formatters
+
+(defn format-media-description [desc]
+  (truncate (html-to-md desc) max-embed-description-length))
+
+(defn format-media-title [{country :countryOfOrigin
+                           :as media}]
+  (str (media-title (:title media))
+    (if-not (= "JP" country)
+      (str " " (get country-codes country)))
+    (if (:isAdult media) " 🔞")))
+
+;;; Embedders
+
+(defn embed-media-links [coll translate]
+  {:name (translate :links)
+   :value (str/join ", " (map #(ds.fmt/embed-link (:site %) (:url %)) coll))})
+
 ;;; GraphQL
 
-(defn media-preview [query type]
-  [:Page {:perPage max-autocomplete-choices}
-   [[:media {:search query
-             :type type}
-     [:id
-      [:title
-       [:english :romaji]]]]]])
+(def fuzzy-date
+  [:day :month :year])
+
+(defn media2
+  [id]
+  [:Media {:id id}
+   [:averageScore :countryOfOrigin :description :format :isAdult :popularity :siteUrl :type
+    ;; Anime only
+    :episodes :duration
+    ;; Manga only
+    :chapters :volumes
+    ;; Both
+    [:source {:version 3}]
+    [:status {:version 2}]
+    [:startDate fuzzy-date]
+    [:endDate fuzzy-date]
+    [:coverImage
+     [:color :extraLarge]]
+    [:title
+     [:english :romaji]]
+    [:rankings
+     [:allTime :rank :type]]
+    [:externalLinks
+     [:site :url]]]])
+
+(defn media-preview2
+  ([query] (media-preview2 query nil))
+  ([query {:keys [adult?]}]
+   [:Page {:perPage max-autocomplete-choices}
+    [[:media (cond-> {:search query}
+               (some? adult?) (assoc :isAdult adult?))
+      [:id :format
+       [:title
+        [:english :romaji]]]]]]))

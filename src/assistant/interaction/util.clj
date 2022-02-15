@@ -2,6 +2,7 @@
 
 (def ephemeral (bit-shift-left 1 6))
 (def max-autocomplete-choices 25)
+(def max-autocomplete-name-length 100)
 (def max-embed-description-length 4096)
 (def component-types
   "https://discord.com/developers/docs/interactions/message-components#component-object-component-types"
