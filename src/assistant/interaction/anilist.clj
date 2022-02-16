@@ -42,22 +42,16 @@
 (defn format-media-title [{country :countryOfOrigin
                            :as media}]
   (str (media-title (:title media))
-    (if-not (= "JP" country)
+    (if (and country (not (= "JP" country)))
       (str " " (get country-codes country)))
     (if (:isAdult media) " 🔞")))
-
-;;; Embedders
-
-(defn embed-media-links [coll translate]
-  {:name (translate :links)
-   :value (str/join ", " (map #(ds.fmt/embed-link (:site %) (:url %)) coll))})
 
 ;;; GraphQL
 
 (def fuzzy-date
   [:day :month :year])
 
-(defn media2
+(defn media
   [id]
   [:Media {:id id}
    [:averageScore :countryOfOrigin :description :format :isAdult :popularity :siteUrl :type
@@ -79,8 +73,8 @@
     [:externalLinks
      [:site :url]]]])
 
-(defn media-preview2
-  ([query] (media-preview2 query nil))
+(defn media-preview
+  ([query] (media-preview query nil))
   ([query {:keys [adult?]}]
    [:Page {:perPage max-autocomplete-choices}
     [[:media (cond-> {:search query}

@@ -56,9 +56,6 @@
         :nsfw-anime "This anime is NSFW and can only be viewed in an NSFW channel."
         :nsfw-manga "This manga is NSFW and can only be viewed in an NSFW channel."
 
-        ;; Templates
-        :nsfw "This {type} is NSFW and can only be viewed in an NSFW channel." ; TODO: Remove.
-        
         ;; Functions
         :abbreviate (fn [n]
                       (if (< -1000 n 1000)
@@ -111,17 +108,17 @@
                                        (if rank
                                          (str " (" (ds.fmt/bold (str \# rank)) ")")))
                                      ""))}}
-        :interaction {:anime {:episodes (fn [n duration]
-                                          (str n
-                                            (if duration
-                                              (str " (" (translate :en :duration (* duration 60)) " "
-                                                (if (= 1 n)
-                                                  "long"
-                                                  "each") ")"))))}
-                      :manga {:chapters (fn [n vols]
-                                          (str n
-                                            (if vols
-                                              (str " (" vols " volume" (if-not (= 1 vols) \s) ")"))))}}
+        :interaction {:animanga {:chapters (fn [n vols]
+                                             (str n
+                                               (if vols
+                                                 (str " (" vols " volume" (if-not (= 1 vols) \s) ")"))))
+                                 :episodes (fn [n dur]
+                                             (str n
+                                               (if dur
+                                                 (str " (" (translate :en :duration (* dur 60)) " "
+                                                   (if (= 1 n)
+                                                     "long"
+                                                     "each") ")"))))}}
         :tongue/missing-key nil}
    :tongue/fallback :en})
 

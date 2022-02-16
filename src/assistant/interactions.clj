@@ -64,9 +64,7 @@
         :data (cond
                 (not media) {:content (translate :not-found)
                              :flags ephemeral}
-                (and adult? (not (<! (nsfw conn interaction)))) {:content (translate (case (:type media)
-                                                                                       "ANIME" :nsfw-anime
-                                                                                       "MANGA" :nsfw-manga))
+                (and adult? (not (<! (nsfw conn interaction)))) {:content (translate (keyword (str "nsfw-" (str/lower-case (:type media)))))
                                                                  :flags ephemeral}
                 :else {:embeds [(let [cover-image (:coverImage media)
                                       episodes (:episodes media)
@@ -92,12 +90,12 @@
                                                      :inline true}]
                                              ;; Anime
                                              episodes (conj {:name (translate :episodes)
-                                                             :value (translate :interaction.anime/episodes episodes (:duration media))
+                                                             :value (translate :interaction.animanga/episodes episodes (:duration media))
                                                              :inline true})
 
                                              ;; Manga
                                              chapters (conj {:name (translate :chapters)
-                                                             :value (translate :interaction.manga/chapters chapters (:volumes media))
+                                                             :value (translate :interaction.animanga/chapters chapters (:volumes media))
                                                              :inline true})
                                              (and (not chapters) volumes) (conj {:name (translate :volumes)
                                                                                  :value volumes
