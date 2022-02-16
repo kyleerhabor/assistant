@@ -2,16 +2,12 @@
   (:require
     [clojure.string :as str]
     [assistant.interaction.util :refer [max-autocomplete-choices max-embed-description-length]]
-    [assistant.utils :refer [truncate]]
-    [camel-snake-kebab.core :as csk]
-    [discljord.formatting :as ds.fmt]))
+    [assistant.utils :refer [truncate]]))
 
 (def country-codes {"JP" "🇯🇵"
                     "CN" "🇨🇳"
                     "KR" "🇰🇷"
                     "TW" "🇹🇼"})
-
-(def kebab-kw (comp keyword csk/->kebab-case))
 
 (defn html-to-md
   "Converts common HTML in AniList to Markdown."
