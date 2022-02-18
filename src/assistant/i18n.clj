@@ -31,7 +31,6 @@
         :movie "Movie"
         :multimedia-project "Multimedia Project"
         :music "Music"
-        :not-found "Not found."
         :not-yet-released "Not Yet Released"
         :novel "Novel"
         :ona "ONA"
@@ -53,8 +52,12 @@
         :volumes "Volumes"
         :web-novel "Web Novel"
         
+        ;; Constant phrases
+        :guild-only "This command can only be run in a server."
+        :not-found "Not found."
         :nsfw-anime "This anime is NSFW and can only be viewed in an NSFW channel."
         :nsfw-manga "This manga is NSFW and can only be viewed in an NSFW channel."
+        :missing-manage-messages "Missing Manage Messages permission."
 
         ;; Functions
         :abbreviate (fn [n]
@@ -118,7 +121,11 @@
                                                  (str " (" (translate :en :duration (* dur 60)) " "
                                                    (if (= 1 n)
                                                      "long"
-                                                     "each") ")"))))}}
+                                                     "each") ")"))))}
+                      :purge {:fail "Purge failed."
+                              ;; "to purge"?
+                              :none "No messages."
+                              :success "Purge successful."}}
         :tongue/missing-key nil}
    :tongue/fallback :en})
 

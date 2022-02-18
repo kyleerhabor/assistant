@@ -1,8 +1,9 @@
-(ns assistant.interactions
+(ns assistant.interaction
   (:require
-    [clojure.core.async :refer [<! >! chan go]]
+    [clojure.core.async :refer [<! >! chan go timeout]]
     [clojure.set :refer [rename-keys]]
     [clojure.string :as str]
+    [assistant.config :as cfg]
     [assistant.interaction.anilist :as anilist]
     [assistant.interaction.util :refer [ephemeral image-sizes max-autocomplete-name-length]]
     [assistant.utils :refer [hex->int split-keys truncate]]
@@ -11,14 +12,35 @@
     [clj-http.client :as http]
     [discljord.cdn :as ds.cdn]
     [discljord.formatting :as ds.fmt]
-    [discljord.messaging :refer [create-interaction-response! get-channel!]]
+    [discljord.messaging :refer [bulk-delete-messages! create-interaction-response! delete-message!
+                                 delete-original-interaction-response! get-channel! get-channel-messages!]]
     [discljord.messaging.specs :refer [command-option-types interaction-response-types]]
-    [graphql-query.core :refer [graphql-query]]))
+    [discljord.permissions :as ds.perms]
+    [graphql-query.core :refer [graphql-query]]
+    [tick.core :as tick]))
 
 (def kebab-kw (comp keyword csk/->kebab-case))
 
 (defn avatar-url [user size]
   (ds.cdn/resize (ds.cdn/effective-user-avatar user) size))
+
+(defn nsfw
+  "Returns a channel with a boolean indicating whether or not an interaction was run in an NSFW environment."
+  [conn interaction]
+  (go
+    (if-let [cid (:channel-id interaction)]
+      (or (:nsfw (<! (get-channel! conn cid))) false)
+      false)))
+
+(defn respond
+  [conn interaction & args]
+  (apply create-interaction-response! conn (:id interaction) (:token interaction) args))
+
+(defn error-data [s]
+  {:content s
+   :flags ephemeral})
+
+;;; HTTP
 
 (defn request-async [options]
   (let [result (chan)
@@ -37,35 +59,20 @@
                                         :body (che/generate-string {:query graphql})
                                         :content-type :json}))))))
 
-(defn nsfw
-  "Returns a channel with a boolean indicating whether or not an interaction was run in an NSFW environment."
-  [conn interaction]
-  (go
-    (if-let [cid (:channel-id interaction)]
-      (or (:nsfw (<! (get-channel! conn cid))) false)
-      false)))
-
-(defn respond
-  [conn interaction & args]
-  (apply create-interaction-response! conn (:id interaction) (:token interaction) args))
-
-(comment
-  (def translate (partial assistant.i18n/translate :en-US)))
-
 ;;; Commands
 
 (defn animanga [conn {{{{id :value} :query} :options} :data
                       :as interaction} {translate :translator}]
   (go
-    (let [body (<! (query-anilist (graphql-query {:queries [(anilist/media2 id)]})))
+    (let [body (<! (query-anilist (graphql-query {:queries [(anilist/media id)]})))
           media (:Media body)
           adult? (:isAdult media)]
       (respond conn interaction (:channel-message-with-source interaction-response-types)
         :data (cond
-                (not media) {:content (translate :not-found)
-                             :flags ephemeral}
-                (and adult? (not (<! (nsfw conn interaction)))) {:content (translate (keyword (str "nsfw-" (str/lower-case (:type media)))))
-                                                                 :flags ephemeral}
+                (not media) (error-data (translate :not-found))
+                (and adult? (not (<! (nsfw conn interaction)))) (error-data (translate (keyword (str
+                                                                                                  "nsfw-"
+                                                                                                  (str/lower-case (:type media))))))
                 :else {:embeds [(let [cover-image (:coverImage media)
                                       episodes (:episodes media)
                                       chapters (:chapters media)
@@ -126,7 +133,7 @@
 (defn animanga-autocomplete [conn {{{{query :value} :query} :options} :data
                                    :as interaction} {translate :translator}]
   (go
-    (let [body (<! (query-anilist (graphql-query {:queries [(anilist/media-preview2 query
+    (let [body (<! (query-anilist (graphql-query {:queries [(anilist/media-preview query
                                                               {:adult? (if-not (<! (nsfw conn interaction))
                                                                          false)})]})))]
       (respond conn interaction (:application-command-autocomplete-result interaction-response-types)
@@ -159,6 +166,33 @@
                           "Server: " (avatar-url member size))
                         user-url))}))
 
+(defn purge [conn {{{{amount :value} :amount} :options} :data
+                   cid :channel-id
+                   :keys [member]
+                   :as interaction} {translate :translator}]
+  (go
+    (let [respond (partial respond conn interaction (:channel-message-with-source interaction-response-types) :data)]
+      (cond
+        (not member)
+        (respond (error-data (translate :guild-only)))
+
+        (not (ds.perms/has-permission-flag? :manage-messages (:permissions member)))
+        (respond (error-data (translate :missing-manage-messages)))
+
+        :else (let [msgs (->> (<! (get-channel-messages! conn cid :limit amount))
+                           (filter #(< -14 (tick/days (tick/between (tick/now) (:timestamp %)))))
+                           (filter (complement :pinned))
+                           (map :id))]
+                (if (seq msgs)
+                  (if (<! (if (= 1 (count msgs))
+                            (delete-message! conn cid (first msgs))
+                            (bulk-delete-messages! conn cid msgs)))
+                    (when (<! (respond {:content (translate :interaction.purge/success)}))
+                      (<! (timeout cfg/purge-timeout))
+                      (delete-original-interaction-response! conn (:application-id interaction) (:token interaction)))
+                    (respond (error-data (translate :interaction.purge/fail))))
+                  (respond (error-data (translate :interaction.purge/none)))))))))
+
 ;;; Command exportation (transformation) facilities.
 
 ;; The interaction commands. The key is the name and the value contains properties useful for dispatchers (e.g. `:fn`).
@@ -180,7 +214,14 @@
                                           :description "The maximum size of the avatar. May be lower if size is not available."
                                           :choices (map #(zipmap [:name :value] (repeat %)) image-sizes)}]}})
 
-(def guild-commands {})
+(def guild-commands {:purge {:fn purge
+                             :description "Deletes messages from the channel."
+                             :options [{:type (:integer command-option-types)
+                                        :name "amount"
+                                        :description "The number of messages to remove (may remove less)."
+                                        :required true
+                                        :min-value 2
+                                        :max-value 100}]}})
 
 (def command-keys [:name :description :options :default-permission :type])
 (def command-option-keys [:type :name :description :required :choices :options :channel-types :min-value :max-value
@@ -224,3 +265,12 @@
 
 (def discord-global-commands (transform global-commands))
 (def discord-guild-commands (transform guild-commands))
+
+#_(defn overwrite-application-commands [conn]
+    (go
+      (<! (bulk-overwrite-global-application-commands! conn appid discord-global-commands))
+      (if (seq discord-guild-commands)
+        (<! (bulk-overwrite-guild-application-commands! conn appid gid discord-guild-commands)))))
+
+(comment
+  (def translate (partial assistant.i18n/translate :en-US)))

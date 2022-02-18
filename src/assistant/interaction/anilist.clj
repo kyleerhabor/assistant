@@ -14,10 +14,10 @@
   [html]
   (-> html
     ;; Very basic and susceptible to failure, but "works".
-    (str/replace #"\r|<br>" "\n")
+    (str/replace #"[\r\n]" "")
+    (str/replace #"<br>" "\n")
     (str/replace #"</?i>" "*")
-    (str/replace #"</?b>" "**")
-    (str/replace #"\n{3,}" "\n\n")))
+    (str/replace #"</?b>" "**")))
 
 (defn media-title
   "Returns the title of a media, favoring english over romaji."

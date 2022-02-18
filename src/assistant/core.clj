@@ -1,18 +1,14 @@
 (ns assistant.core
   (:require
     [clojure.core.async :as async :refer [chan go]]
-    [clojure.edn :as edn]
+    [assistant.config :as cfg]
     [assistant.events :refer [handler]]
     [discljord.connections :refer [connect-bot! disconnect-bot!]]
     [discljord.events :refer [message-pump!]]
     [discljord.messaging :refer [start-connection! stop-connection!]]))
 
-(defn read-config
-  [files]
-  (apply merge-with into (map (comp edn/read-string slurp) files)))
-
 (defn -main [& configs]
-  (let [config (read-config configs)
+  (let [config (cfg/read-config configs)
         event-ch (chan (or (:bot/event-channel-size config) 128))
         conn-ch (connect-bot! (:bot/token config) event-ch
                   :intents #{})

@@ -2,7 +2,7 @@
   (:require
     [clojure.core.async :refer [<! go]]
     [assistant.i18n :refer [translate]]
-    [assistant.interactions :refer [discord-global-commands discord-guild-commands global-commands guild-commands]]
+    [assistant.interaction :refer [discord-global-commands discord-guild-commands global-commands guild-commands]]
     [assistant.utils :refer [rpartial]]
     [discljord.messaging :refer [bulk-overwrite-global-application-commands! bulk-overwrite-guild-application-commands!]]))
 
