@@ -32,11 +32,11 @@ Assistant was created to address those issues. The adoption of interactions cont
 are familiar with and can benefit from (no help command!). Commands are designed to be minimalistic by only displaying
 the information essential to users, with options for configuration and convenient defaults where they make sense. When
 it's not possible to be simple, the project will refuse a feature or compromise where possible. For example, while a
-[pick command](#17) would be useful, Discord has no support for variadic arguments, therefore it hasn't been implemented.
-The `/animanga` command, on the other hand, only accepts an ID for its `query` parameter due to anime and manga sharing
-identical titles. To alleviate the burden, the command supports autocomplete and maps titles to their IDs. Assistant's
-principles are based on what makes traditional commands and slash commands appealing to developers and users and I hope
-you enjoy its design philosophy.
+[pick command](https://github.com/KyleErhabor/assistant/issues/17) would be useful, Discord has no support for variadic
+arguments, therefore it hasn't been implemented. The `/animanga` command, on the other hand, only accepts an ID for its
+`query` parameter due to anime and manga sharing identical titles. To alleviate the burden, the command supports
+autocomplete and maps titles to their IDs. Assistant's principles are based on what makes traditional commands and slash
+commands appealing to developers and users and I hope you enjoy its design philosophy.
 
 *- Klay#0427*
 
