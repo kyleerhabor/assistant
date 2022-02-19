@@ -50,29 +50,31 @@ your own instance.
 To invite your own instance of Assistant, use the following invite link, replacing `CLIENT_ID` with your bot's ID:
 `https://discord.com/api/oauth2/authorize?client_id=CLIENT_ID&permissions=9216&scope=bot%20applications.commands`
 
-### Installing
+### Download
 
 You can download the project with `git clone https://github.com/KyleErhabor/assistant` or from the
-[releases](https://github.com/KyleErhabor/assistant/releases) tab on GitHub.
+[releases](https://github.com/KyleErhabor/assistant/releases) tab on GitHub. Downloading with `git clone` is useful when
+you'd like the latest features, but don't mind the potential bugs it may have.
 
-### Configuring
+### Configuration
 
-Assistant accepts a list of files that will be parsed as [edn](https://github.com/edn-format/edn) and used throughout
-the application, giving you the flexibility to host multiple, ad hoc configurations (development, testing, production, etc.)
+Assistant accepts a list of files when running that will be parsed as [edn](https://github.com/edn-format/edn) and used
+throughout the application, giving you the flexibility to host multiple, ad hoc configurations
+(development, testing, production, etc.)
 
 #### `:bot/token`
 
-**Required.** The token of the bot to use to login to Discord.
+**Required.** The token of the bot to use when logging in to Discord.
 
 #### `:bot/commands`
 
-A map of global and guild commands the bot supports. Global commands are mapped keyed as `:global` while guild commands
-are keyed by the guild they're associated with. The value is a map representing the type of command it is, currently
-accepting `:slash`, `:user`, or `:message`. Finally, the map of the type maps the command names to their individual
-configurations. For example, the following would:
+A map of global and guild commands. Global commands are keyed under `:global` while guild commands are keyed by the
+guild they're associated with. The value is a map representing the type of the command
+(currently accepting `:slash`, `:user`, or `:message`). Finally, the value is a map of the command names to their
+individual configurations. For example, the following would:
 - Set the global `purge` slash command's success message timeout before deletion to 3 seconds.
-- Set the commands mapped at the guild with the ID `939382862401110058` to the following.
-  - Set the `report` user command's report channel to the channel with the ID `940331535196901386`.
+- For the guild with the ID of `939382862401110058`,
+  - Set the `report` user command's destination channel ID to `940331535196901386`.
   - Set the `translate` message command's supported languages to English (United States and Great Britain) and Chinese
   (China and Taiwan).
 
@@ -90,7 +92,7 @@ To start Assistant, run:
 ```sh
 clojure -M -m assistant.core ...
 ```
-The `...` represents the list of [configuration files](#configuring) to use. For example, the following would read,
+The `...` represents the list of [configuration files](#configuration) to use. For example, the following would read,
 parse, and merge `config.edn` and `secrets.edn` from left to right, with the right taking precedence in the event of
 duplication.
 ```sh
