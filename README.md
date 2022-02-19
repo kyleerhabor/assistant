@@ -30,7 +30,7 @@ Today, however, there's no reason why this can't be a reality.
 I yearned for a bot capable of providing a simple interface and experience, but couldn't find one I liked. In protest,
 Assistant was created to address those issues. The adoption of interactions contributes to a consistent system all users
 are familiar with and can benefit from (no help command!). Commands are designed to be minimalistic by only displaying
-the information essential to users with options for configuration and convenient defaults where they make sense. When
+the information essential to users, with options for configuration and convenient defaults where they make sense. When
 it's not possible to be simple, the project will refuse a feature or compromise where possible. For example, while a
 [pick command](#17) would be useful, Discord has no support for variadic arguments, therefore it hasn't been implemented.
 The `/animanga` command, on the other hand, only accepts an ID for its `query` parameter due to anime and manga sharing
