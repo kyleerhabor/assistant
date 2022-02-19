@@ -18,8 +18,6 @@
 (defmethod handler :interaction-create
   [conn _ interaction {:keys [config]
                        :as options}]
-  ;; First let: get all "names" from the interaction: command, subcommand group, and subcommand. Also retrieve the
-  ;; options associated with the deepest level.
   (let [options (assoc options :translator (partial translate (:locale interaction)))
         commands (which-commands (:bot/guild-id config) (:guild-id interaction))]
     ;; Will succeed on message components.

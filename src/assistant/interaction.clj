@@ -179,9 +179,13 @@
         (not (ds.perms/has-permission-flag? :manage-messages (:permissions member)))
         (respond (error-data (translate :missing-manage-messages)))
 
-        :else (let [msgs (->> (<! (get-channel-messages! conn cid :limit amount))
+        ;; Instead of fetching up to the number of messages to purge, this will fetch the maximum amount (100), then
+        ;; apply the filters, and take up to the number of messages requested to purge. This is because a collection of
+        ;; messages could be filtered and return less than what the user requested, which may be annoying.
+        :else (let [msgs (->> (<! (get-channel-messages! conn cid :limit 100))
                            (filter #(< -14 (tick/days (tick/between (tick/now) (:timestamp %)))))
                            (filter (complement :pinned))
+                           (take amount)
                            (map :id))]
                 (if (seq msgs)
                   (if (<! (if (= 1 (count msgs))
@@ -273,4 +277,5 @@
         (<! (bulk-overwrite-guild-application-commands! conn appid gid discord-guild-commands)))))
 
 (comment
+  #_{:clj-kondo/ignore [:unresolved-namespace]}
   (def translate (partial assistant.i18n/translate :en-US)))
