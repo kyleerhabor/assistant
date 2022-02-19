@@ -73,7 +73,7 @@ guild they're associated with. The value is a map representing the type of the c
 (currently accepting `:slash`, `:user`, or `:message`). Finally, the value is a map of the command names to their
 individual configurations. For example, the following would:
 - Set the global `purge` slash command's success message timeout before deletion to 3 seconds.
-- For the guild with the ID of `939382862401110058`,
+- Perform the following for the guild with the ID of `939382862401110058`,
   - Set the `report` user command's destination channel ID to `940331535196901386`.
   - Set the `translate` message command's supported languages to English (United States and Great Britain) and Chinese
   (China and Taiwan).
