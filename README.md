@@ -19,10 +19,12 @@ With the introduction of interactions, many bots replaced their systems with sla
 and complexities of their former implementations. Commands are often conflated with non-essential information or details
 the user did not request for. For example, while the `/avatar` command is meant to display a user's avatar, bots often
 include extra details, such as who's avatar it is (e.g. "Avatar for Klay#0427"), links to additional formats and sizes,
-who ran the command, the guild icon, and more despite none of it being requested or essential. While many developers
-believe that the extra information can be useful and merely ignored, I believe users should receive the information they
-need and request the extra they want. Previously, this meant using named parameters (with dashes usually), which were
-notoriously difficult for users to comprehend. Today, however, there's no reason why this can't be a reality.
+who ran the command, the guild icon, and more, despite none of it being requested or essential. While many developers
+believe that the information can be useful and merely ignored, I believe users should receive the information they
+need and request the extra they want. Previously, this meant using named parameters
+(with dashes usually, like `-f`, `--flag`, `--flag=value`, and `--flag="some value"`), resolvers (or types),
+documentation (help command, wiki, website, etc.), and more, which was notoriously difficult for users to comprehend.
+Today, however, there's no reason why this can't be a reality.
 
 <!-- "wanted" or "yearned for"? -->
 I yearned for a bot capable of providing a simple interface and experience, but couldn't find one I liked. In protest,
