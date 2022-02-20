@@ -1,5 +1,4 @@
-{:paths ["src" "resources"]
- :jvm-opts ["-Dclojure.tools.logging.factory=clojure.tools.logging.impl/slf4j-factory"]
+{:paths ["src"]
  :deps {org.clojure/clojure {:mvn/version "1.10.3"}
         org.clojure/core.async {:mvn/version "1.5.648"}
         camel-snake-kebab/camel-snake-kebab {:mvn/version "0.4.2"}
