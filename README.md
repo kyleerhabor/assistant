@@ -23,7 +23,7 @@ who ran the command, the guild icon, and more, despite none of it being requeste
 believe that the information can be useful and merely ignored, I believe users should receive the information they
 need and request the extra they want. Previously, this meant using named parameters
 (with dashes usually, like `-f`, `--flag`, `--flag=value`, and `--flag="some value"`), resolvers (or types),
-documentation (help command, wiki, website, etc.), and more, which was notoriously difficult for users to comprehend.
+documentation (help command, wiki, website, etc.), and more, which were notoriously difficult for users to comprehend.
 Today, however, there's no reason why this can't be a reality.
 
 <!-- "wanted" or "yearned for"? -->
