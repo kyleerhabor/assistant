@@ -70,7 +70,7 @@ throughout the application, giving you the flexibility to host multiple, ad hoc 
 
 A map of global and guild commands. Global commands are keyed under `:global` while guild commands are keyed by the
 guild they're associated with. The value is a map representing the type of the command
-(currently accepting `:slash`, `:user`, or `:message`). Finally, the value is a map of the command names to their
+(currently accepting `:chat-input`, `:user`, or `:message`). Finally, the value is a map of the command names to their
 individual configurations. For example, the following would:
 - Set the global `purge` slash command's success message timeout before deletion to 3 seconds.
 - Perform the following for the guild with the ID of `939382862401110058`,
@@ -80,7 +80,7 @@ individual configurations. For example, the following would:
 
 Note that the `report` and `translate` commands don't actually exist.
 ```clj
-{:bot/commands {:global {:slash {:purge {:timeout 3000}}}
+{:bot/commands {:global {:chat-input {:purge {:timeout 3000}}}
                 "939382862401110058" {:user {:report {:channel-id "940331535196901386"}}
                                       :message {:translate {:languages [:en-US :en-GB :zh-CN :zh-TW]}}}}}
 ```

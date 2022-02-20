@@ -130,3 +130,5 @@
    :tongue/fallback :en})
 
 (def translate (tongue/build-translate translations))
+
+;;; Guild-specific commands will be represented as their own translations.

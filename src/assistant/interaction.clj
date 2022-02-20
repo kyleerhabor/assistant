@@ -14,7 +14,7 @@
     [discljord.formatting :as ds.fmt]
     [discljord.messaging :refer [bulk-delete-messages! create-interaction-response! delete-message!
                                  delete-original-interaction-response! get-channel! get-channel-messages!]]
-    [discljord.messaging.specs :refer [command-option-types interaction-response-types]]
+    [discljord.messaging.specs :refer [command-option-types command-types interaction-response-types]]
     [discljord.permissions :as ds.perms]
     [graphql-query.core :refer [graphql-query]]
     [tick.core :as tick]))
@@ -169,7 +169,8 @@
 (defn purge [conn {{{{amount :value} :amount} :options} :data
                    cid :channel-id
                    :keys [member]
-                   :as interaction} {translate :translator}]
+                   :as interaction} {translate :translator
+                                     :keys [config]}]
   (go
     (let [respond (partial respond conn interaction (:channel-message-with-source interaction-response-types) :data)]
       (cond
@@ -192,44 +193,68 @@
                             (delete-message! conn cid (first msgs))
                             (bulk-delete-messages! conn cid msgs)))
                     (when (<! (respond {:content (translate :interaction.purge/success)}))
-                      (<! (timeout cfg/purge-timeout))
+                      (<! (timeout (or (:timeout (:purge (:chat-input (:global (:bot/commands config))))) cfg/purge-timeout)))
                       (delete-original-interaction-response! conn (:application-id interaction) (:token interaction)))
                     (respond (error-data (translate :interaction.purge/fail))))
                   (respond (error-data (translate :interaction.purge/none)))))))))
+
+(defn relation-add [conn interaction _]
+  )
 
 ;;; Command exportation (transformation) facilities.
 
 ;; The interaction commands. The key is the name and the value contains properties useful for dispatchers (e.g. `:fn`).
 ;; :options is an array of maps instead of a map of maps since the order matters to Discord.
-(def global-commands {:animanga {:fn animanga
-                                 :description "Search for an anime or manga."
-                                 :options [{:type (:integer command-option-types)
-                                            :name "query"
-                                            :description "The anime or manga to search for."
-                                            :required true
-                                            :autocomplete animanga-autocomplete}]}
-                      :avatar {:fn avatar
-                               :description "Displays a user's avatar."
-                               :options [{:type (:user command-option-types)
-                                          :name "user"
-                                          :description "The user to retrieve the avatar of. Defaults to the user who ran the command."}
-                                         {:type (:integer command-option-types)
-                                          :name "size"
-                                          :description "The maximum size of the avatar. May be lower if size is not available."
-                                          :choices (map #(zipmap [:name :value] (repeat %)) image-sizes)}]}})
 
-(def guild-commands {:purge {:fn purge
-                             :description "Deletes messages from the channel."
-                             :options [{:type (:integer command-option-types)
-                                        :name "amount"
-                                        :description "The number of messages to remove (may remove less)."
-                                        :required true
-                                        :min-value 2
-                                        :max-value 100}]}})
+(def commands
+  "The global application commands."
+  {:chat-input {"animanga" {:fn animanga
+                            :description "Search for an anime or manga."
+                            :options [{:type (:integer command-option-types)
+                                       :name "query"
+                                       :description "The anime or manga to search for."
+                                       :required true
+                                       :autocomplete animanga-autocomplete}]}
+                "avatar" {:fn avatar
+                          :description "Displays a user's avatar."
+                          :options [{:type (:user command-option-types)
+                                     :name "user"
+                                     :description "The user to retrieve the avatar of. Defaults to the user who ran the command."}
+                                    {:type (:integer command-option-types)
+                                     :name "size"
+                                     :description "The maximum size of the avatar. May be lower if size is not available."
+                                     :choices (map #(zipmap [:name :value] (repeat %)) image-sizes)}]}
+                "purge" {:fn purge
+                         :description "Deletes messages from the channel."
+                         :options [{:type (:integer command-option-types)
+                                    :name "amount"
+                                    :description "The number of messages to remove (may remove less)."
+                                    :required true
+                                    :min-value 2
+                                    :max-value 100}]}}})
+
+(def guild-commands
+  "The application commands for individual, specialized guilds."
+  {"939382862401110058" {:chat-input {"relation" {:description "Relation graphing facilities."
+                                                  "add" {:fn relation-add
+                                                         :description "Adds a relation."
+                                                         :options [{:type (:user command-option-types)
+                                                                    :name "source"
+                                                                    :description "The user to start from (e.g. main account)."
+                                                                    :required true}
+                                                                   {:type (:user command-option-types)
+                                                                    :name "target"
+                                                                    :description "The user to end at."}
+                                                                   {:type (:string command-option-types)
+                                                                    :name "notes"
+                                                                    :description "The details about the relation."}]}}}}})
 
 (def command-keys [:name :description :options :default-permission :type])
 (def command-option-keys [:type :name :description :required :choices :options :channel-types :min-value :max-value
                           :autocomplete])
+
+(defn normalize [m name]
+  (dissoc (assoc m :name name) :fn :components))
 
 (defn normalize-option [option]
   (let [option (rename-keys option {:channel-types :channel_types
@@ -245,9 +270,6 @@
       (update command :options (partial map normalize-option))
       command)))
 
-(defn normalize [m name]
-  (dissoc (assoc m :name name) :fn :components))
-
 (defn transform-subs [subcommands]
   (reduce-kv (fn [coll name option]
                (let [[option subs] (split-keys (normalize-option (normalize option name)) command-option-keys)]
@@ -258,23 +280,21 @@
                               (assoc option :type (:sub-command command-option-types)))))) [] subcommands))
 
 (defn transform [commands]
-  (reduce-kv (fn [coll name command]
-               (let [[command subs] (split-keys (normalize-command (normalize command name)) command-keys)]
-                 (conj coll (if (seq subs)
-                              ;; If there are sub-commands, there are no options to begin with. Therefore, it's safe to
-                              ;; `assoc` here.
-                              (assoc command :options (transform-subs subs))
-                              command)))) [] commands))
+  (reduce-kv
+    (fn [coll type commands]
+      (concat coll
+        (reduce-kv
+          (fn [coll c-name command]
+            (let [[command subs] (split-keys (normalize-command (normalize command c-name)) command-keys)]
+              (conj coll (assoc (if (seq subs)
+                                  (assoc command :options (transform-subs subs))
+                                  command) :type (type command-types)))))
+          [] commands)))
+    [] commands))
 
-
-(def discord-global-commands (transform global-commands))
-(def discord-guild-commands (transform guild-commands))
-
-#_(defn overwrite-application-commands [conn]
-    (go
-      (<! (bulk-overwrite-global-application-commands! conn appid discord-global-commands))
-      (if (seq discord-guild-commands)
-        (<! (bulk-overwrite-guild-application-commands! conn appid gid discord-guild-commands)))))
+(def discord-commands (transform commands))
+(def discord-guild-commands (reduce-kv (fn [m guild-id commands]
+                                         (assoc m guild-id (transform commands))) {} guild-commands))
 
 (comment
   #_{:clj-kondo/ignore [:unresolved-namespace]}

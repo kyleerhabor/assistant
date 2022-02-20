@@ -2,7 +2,7 @@
   (:require [clojure.edn :as edn]))
 
 (def purge-timeout
-  "The number of milliseconds to wait before deleting the purge success message."
+  "The number of milliseconds to wait for before deleting the purge success message."
   2000)
 
 (defn read-config
