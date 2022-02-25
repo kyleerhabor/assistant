@@ -126,6 +126,8 @@
                               ;; "to purge"?
                               :none "No messages."
                               :success "Purge successful."}}
+        :command {:chat-input {:relation {:add {:success "Relation added."}
+                                          }}}
         :tongue/missing-key nil}
    :tongue/fallback :en})
 

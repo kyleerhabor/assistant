@@ -4,12 +4,14 @@
     [clojure.set :refer [rename-keys]]
     [clojure.string :as str]
     [assistant.config :as cfg]
+    [assistant.db :as db]
     [assistant.interaction.anilist :as anilist]
     [assistant.interaction.util :refer [ephemeral image-sizes max-autocomplete-name-length]]
     [assistant.utils :refer [hex->int split-keys truncate]]
     [camel-snake-kebab.core :as csk]
     [cheshire.core :as che]
     [clj-http.client :as http]
+    [datascript.core :as d]
     [discljord.cdn :as ds.cdn]
     [discljord.formatting :as ds.fmt]
     [discljord.messaging :refer [bulk-delete-messages! create-interaction-response! delete-message!
@@ -198,8 +200,27 @@
                     (respond (error-data (translate :interaction.purge/fail))))
                   (respond (error-data (translate :interaction.purge/none)))))))))
 
-(defn relation-add [conn interaction _]
-  )
+;; TODO: Consider abstracting away the `conn` parameter and `db/conn` usage.
+(defn relation-add [conn {{{{source :value} "source"
+                            {target :value} "target"
+                            {title :value} "title"
+                            {notes :value} "notes"} :options} :data
+                          :as interaction} {translate :translator}]
+  (d/transact! db/conn [(cond-> {:relation/source source
+                                 :relation/notes notes}
+
+                          target (assoc :relation/target target))])
+  (respond conn interaction (:channel-message-with-source interaction-response-types)
+    :data {:content (translate :command.chat-input.relation.add/success)}))
+
+(defn relation-view [conn {{{{user :value} "user"
+                             {search :value} "search"} :options} :data
+                           :as interaction} {translate :translator}]
+  (d/q '[:find (pull ?e [:relation/target :relation/title :relation/notes])
+         :in $ ?source
+         :where [?e :relation/source ?source]] @db/conn user)
+  (respond conn interaction (:channel-message-with-source interaction-response-types)
+    :data (error-data (translate :not-found))))
 
 ;;; Command exportation (transformation) facilities.
 
@@ -240,14 +261,26 @@
                                                          :description "Adds a relation."
                                                          :options [{:type (:user command-option-types)
                                                                     :name "source"
-                                                                    :description "The user to start from (e.g. main account)."
+                                                                    :description "The user to start from."
                                                                     :required true}
-                                                                   {:type (:user command-option-types)
-                                                                    :name "target"
-                                                                    :description "The user to end at."}
                                                                    {:type (:string command-option-types)
                                                                     :name "notes"
-                                                                    :description "The details about the relation."}]}}}}})
+                                                                    :description "The details about the relation."
+                                                                    :required true}
+                                                                   {:type (:string command-option-types)
+                                                                    :name "title"
+                                                                    :description "What the relation is about."}
+                                                                   {:type (:user command-option-types)
+                                                                    :name "target"
+                                                                    :description "The user to end at."}]}
+                                                  "view" {:fn relation-view
+                                                          :description "Views relations."
+                                                          :options [{:type (:user command-option-types)
+                                                                     :name "user"
+                                                                     :description "The user to lookup."}
+                                                                    {:type (:user command-option-types)
+                                                                     :name "search"
+                                                                     :description "The text to match for titles and notes."}]}}}}})
 
 (def command-keys [:name :description :options :default-permission :type])
 (def command-option-keys [:type :name :description :required :choices :options :channel-types :min-value :max-value

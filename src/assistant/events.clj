@@ -4,7 +4,6 @@
     [clojure.set :refer [map-invert]]
     [assistant.i18n :refer [translate]]
     [assistant.interaction :refer [discord-commands discord-guild-commands commands guild-commands]]
-    [assistant.utils :refer [rpartial]]
     [discljord.messaging :refer [bulk-overwrite-global-application-commands! bulk-overwrite-guild-application-commands!]]
     [discljord.messaging.specs :as ds.ms]))
 
@@ -21,8 +20,6 @@
                      :as interaction} names]
   (or (if-let [gcmds (guild-commands guild-id)]
         (which-command gcmds interaction names)) (which-command commands interaction names)))
-
-(find-command {:data {:type 1}} ["avatar"])
 
 (defmethod handler :interaction-create
   [conn _ interaction options]
