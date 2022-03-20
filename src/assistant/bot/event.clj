@@ -1,13 +1,14 @@
-(ns assistant.events
+(ns assistant.bot.event
   (:require
     [clojure.core.async :refer [<! go]]
+    [clojure.pprint :refer [pprint]]
     [clojure.set :refer [map-invert]]
     [assistant.i18n :refer [translate]]
-    [assistant.interaction :refer [discord-commands discord-guild-commands commands guild-commands]]
+    [assistant.bot.interaction :refer [discord-commands discord-guild-commands commands guild-commands]]
     [discljord.messaging :refer [bulk-overwrite-global-application-commands! bulk-overwrite-guild-application-commands!]]
     [discljord.messaging.specs :as ds.ms]))
 
-(defmulti handler
+(defmulti handle
   "Handler for Discord API events."
   (fn [_ type _ _] type))
 
@@ -18,10 +19,12 @@
 
 (defn find-command [{:keys [guild-id]
                      :as interaction} names]
-  (or (if-let [gcmds (guild-commands guild-id)]
-        (which-command gcmds interaction names)) (which-command commands interaction names)))
+  (or
+    (if-let [gcmds (guild-commands guild-id)]
+      (which-command gcmds interaction names))
+    (which-command commands interaction names)))
 
-(defmethod handler :interaction-create
+(defmethod handle :interaction-create
   [conn _ interaction options]
   (let [options (assoc options :translator (partial translate (:locale interaction)))]
     (if-let [name (:name (:interaction (:message interaction)))]
@@ -35,9 +38,8 @@
                                        (recur (conj names (:name option)) (:options option))
                                        {:names names
                                         :opts options})))
-            ;; Update interaction to include the options that only matter.
             interaction (assoc-in interaction [:data :options] (reduce (fn [m opt]
-                                                                         (assoc m (:name opt) opt)) {} opts))
+                                                                         (assoc m (keyword (:name opt)) opt)) {} opts))
             command (find-command interaction names)
             opt (first opts)
             call (if (:focused opt)
@@ -45,12 +47,9 @@
                    (:fn command))]
         (call conn interaction options)))))
 
-(defmethod handler :ready
+(defmethod handle :ready
   [conn _ data _]
-  (let [app-id (:id (:application data))]
-    (go
-      (clojure.pprint/pprint (<! (bulk-overwrite-global-application-commands! conn app-id discord-commands)))
-      (run! (comp #(go (clojure.pprint/pprint (<! %))) (partial apply bulk-overwrite-guild-application-commands! conn app-id)) discord-guild-commands))))
+  (println "Bot ready!"))
 
-(defmethod handler :default
+(defmethod handle :default
   [_ _ _ _])

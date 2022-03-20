@@ -1,24 +1,30 @@
-(ns assistant.interaction
+(ns assistant.bot.interaction
   (:require
     [clojure.core.async :refer [<! >! chan go timeout]]
     [clojure.set :refer [rename-keys]]
     [clojure.string :as str]
-    [assistant.config :as cfg]
+    [assistant.config :as config]
     [assistant.db :as db]
-    [assistant.interaction.anilist :as anilist]
-    [assistant.interaction.util :refer [ephemeral image-sizes max-autocomplete-name-length]]
-    [assistant.utils :refer [hex->int split-keys truncate]]
+    [assistant.bot.util :refer [connect disconnect]]
+    [assistant.bot.interaction.anilist :as anilist]
+    [assistant.bot.interaction.util :refer [ephemeral image-sizes max-autocomplete-name-length]]
+    [assistant.util :refer [base64 hex->int split-keys truncate]]
+    [aleph.http :as http]
     [camel-snake-kebab.core :as csk]
     [cheshire.core :as che]
-    [clj-http.client :as http]
-    [datascript.core :as d]
+    [clj-http.client :as client]
+    [datalevin.core :as d]
     [discljord.cdn :as ds.cdn]
     [discljord.formatting :as ds.fmt]
-    [discljord.messaging :refer [bulk-delete-messages! create-interaction-response! delete-message!
-                                 delete-original-interaction-response! get-channel! get-channel-messages!]]
+    [discljord.messaging :refer [bulk-delete-messages! bulk-overwrite-global-application-commands!
+                                 bulk-overwrite-guild-application-commands! create-guild-emoji!
+                                 create-interaction-response! delete-message! delete-original-interaction-response!
+                                 get-channel! get-channel-messages! get-current-application-information!]]
     [discljord.messaging.specs :refer [command-option-types command-types interaction-response-types]]
     [discljord.permissions :as ds.perms]
     [graphql-query.core :refer [graphql-query]]
+    [hato.client :as hc]
+    [manifold.deferred :as mfd]
     [tick.core :as tick]))
 
 (def kebab-kw (comp keyword csk/->kebab-case))
@@ -34,9 +40,12 @@
       (or (:nsfw (<! (get-channel! conn cid))) false)
       false)))
 
+(defn responder [conn inter]
+  (partial create-interaction-response! conn (:id inter) (:token inter)))
+
 (defn respond
-  [conn interaction & args]
-  (apply create-interaction-response! conn (:id interaction) (:token interaction) args))
+  [conn inter & args]
+  (apply (responder conn inter) args))
 
 (defn error-data [s]
   {:content s
@@ -44,10 +53,12 @@
 
 ;;; HTTP
 
+(def http-client (hc/build-http-client {:redirect-policy :normal}))
+
 (defn request-async [options]
   (let [result (chan)
         options (assoc options :async? true)]
-    (http/request options
+    (client/request options
       #(go (>! result %))
       ;; In the event of an error, we'll just do nothing. `result` will park on take and cause the interaction to
       ;; timeout.
@@ -168,6 +179,13 @@
                           "Server: " (avatar-url member size))
                         user-url))}))
 
+(defn emoji-create [conn {{{{name :value} :name
+                            {url :value} :url} :options} :data
+                          :as interaction} _]
+  (clojure.pprint/pprint @(create-guild-emoji! conn (:guild-id interaction) name (str
+                                                                                   "data:image/jpeg;base64,"
+                                                                                   (base64 (:body (hc/get url {:http-client http-client})))) [])))
+
 (defn purge [conn {{{{amount :value} :amount} :options} :data
                    cid :channel-id
                    :keys [member]
@@ -195,16 +213,16 @@
                             (delete-message! conn cid (first msgs))
                             (bulk-delete-messages! conn cid msgs)))
                     (when (<! (respond {:content (translate :interaction.purge/success)}))
-                      (<! (timeout (or (:timeout (:purge (:chat-input (:global (:bot/commands config))))) cfg/purge-timeout)))
+                      (<! (timeout (or (:timeout (:purge (:chat-input (:global (:bot/commands config))))) config/purge-timeout)))
                       (delete-original-interaction-response! conn (:application-id interaction) (:token interaction)))
                     (respond (error-data (translate :interaction.purge/fail))))
                   (respond (error-data (translate :interaction.purge/none)))))))))
 
 ;; TODO: Consider abstracting away the `conn` parameter and `db/conn` usage.
-(defn relation-add [conn {{{{source :value} "source"
-                            {target :value} "target"
-                            {title :value} "title"
-                            {notes :value} "notes"} :options} :data
+(defn relation-add [conn {{{{source :value} :source
+                            {target :value} :target
+                            {title :value} :title
+                            {notes :value} :notes} :options} :data
                           :as interaction} {translate :translator}]
   (d/transact! db/conn [(cond-> {:relation/source source
                                  :relation/notes notes}
@@ -213,8 +231,8 @@
   (respond conn interaction (:channel-message-with-source interaction-response-types)
     :data {:content (translate :command.chat-input.relation.add/success)}))
 
-(defn relation-view [conn {{{{user :value} "user"
-                             {search :value} "search"} :options} :data
+(defn relation-view [conn {{{{user :value} :user
+                             {search :value} :search} :options} :data
                            :as interaction} {translate :translator}]
   (d/q '[:find (pull ?e [:relation/target :relation/title :relation/notes])
          :in $ ?source
@@ -256,7 +274,18 @@
 
 (def guild-commands
   "The application commands for individual, specialized guilds."
-  {"939382862401110058" {:chat-input {"relation" {:description "Relation graphing facilities."
+  {"939382862401110058" {:chat-input {"emoji" {:description "Emoji facilities."
+                                               "create" {:fn emoji-create
+                                                         :description "Creates an emoji."
+                                                         :options [{:type (:string command-option-types)
+                                                                    :name "url"
+                                                                    :description "A URL pointing to the image to upload."
+                                                                    :required true}
+                                                                   {:type (:string command-option-types)
+                                                                    :name "name"
+                                                                    :description "The name of the emoji."
+                                                                    :required true}]}}
+                                      "relation" {:description "Relation graphing facilities."
                                                   "add" {:fn relation-add
                                                          :description "Adds a relation."
                                                          :options [{:type (:user command-option-types)
@@ -328,6 +357,20 @@
 (def discord-commands (transform commands))
 (def discord-guild-commands (reduce-kv (fn [m guild-id commands]
                                          (assoc m guild-id (transform commands))) {} guild-commands))
+
+;;; deps.edn
+
+(defn upload [{:keys [configs scopes]}]
+  (let [config (apply config/read-config configs)
+        {conn :msg-ch
+         :as chans} (connect config)
+        appid (:id @(get-current-application-information! conn))]
+    (doseq [scope scopes]
+      (println @(if (= :global scope)
+                  (bulk-overwrite-global-application-commands! conn appid discord-commands)
+                  (bulk-overwrite-guild-application-commands! conn appid scope (get discord-guild-commands scope)))))
+    (disconnect chans)
+    (shutdown-agents)))
 
 (comment
   #_{:clj-kondo/ignore [:unresolved-namespace]}

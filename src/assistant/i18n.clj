@@ -1,7 +1,7 @@
 (ns assistant.i18n
   (:require
     [clojure.string :as str]
-    [assistant.utils :refer [precision]]
+    [assistant.util :refer [precision]]
     [discljord.formatting :as ds.fmt]
     [tongue.core :as tongue]))
 

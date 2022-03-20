@@ -1,12 +1,13 @@
-(ns assistant.interaction.anilist
+(ns assistant.bot.interaction.anilist
   (:require
     [clojure.string :as str]
-    [assistant.interaction.util :refer [max-autocomplete-choices max-embed-description-length]]
-    [assistant.utils :refer [truncate]]))
+    [assistant.bot.interaction.util :refer [max-autocomplete-choices max-embed-description-length]]
+    [assistant.util :refer [truncate]]))
 
 (def country-codes {"JP" "🇯🇵"
                     "CN" "🇨🇳"
                     "KR" "🇰🇷"
+                    ;; -500 social credit
                     "TW" "🇹🇼"})
 
 (defn html-to-md
@@ -38,7 +39,7 @@
 (defn format-media-title [{country :countryOfOrigin
                            :as media}]
   (str (media-title (:title media))
-    (if (and country (not (= "JP" country)))
+    (if (and country (not= "JP" country))
       (str " " (get country-codes country)))
     (if (:isAdult media) " 🔞")))
 

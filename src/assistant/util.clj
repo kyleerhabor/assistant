@@ -1,13 +1,22 @@
-(ns assistant.utils
+(ns assistant.util
+  (:import (java.util Base64))
   (:require [clojure.string :as str]))
 
-(defn hex->int [hex]
+(defn base64
+  "Converts string `s` into its base 64 representation."
+  [s]
+  (.encodeToString (Base64/getEncoder) (byte-array (map byte s))))
+
+(defn hex->int
+  "Converts hexadecimal string `hex` into its integer representation. Can optionally be prefixed with `#`."
+  [hex]
   (Long/parseLong (if (str/starts-with? hex "#")
                     (subs hex 1)
                     hex) 16))
 
 (defmacro ignore-ex
-  "Evaluates `body`, returning the value of the last expression or `nil` if an exception is caught."
+  "Evaluates `body`, returning the value of the last expression or `nil` if an exception is caught. Will not catch
+  unrealized errors (e.g. lazy sequences)."
   [& body]
   `(try ~@body
      (catch Exception _#)))

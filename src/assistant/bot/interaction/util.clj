@@ -1,4 +1,4 @@
-(ns assistant.interaction.util)
+(ns assistant.bot.interaction.util)
 
 (def ephemeral (bit-shift-left 1 6))
 (def max-autocomplete-choices 25)
