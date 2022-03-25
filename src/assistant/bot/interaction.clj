@@ -219,11 +219,11 @@
                   (respond (error-data (translate :interaction.purge/none)))))))))
 
 ;; TODO: Consider abstracting away the `conn` parameter and `db/conn` usage.
-(defn relation-add [conn {{{{source :value} :source
-                            {target :value} :target
-                            {title :value} :title
-                            {notes :value} :notes} :options} :data
-                          :as interaction} {translate :translator}]
+(defn relation-create [conn {{{{source :value} :source
+                               {target :value} :target
+                               {_title :value} :title
+                               {notes :value} :notes} :options} :data
+                             :as interaction} {translate :translator}]
   (d/transact! db/conn [(cond-> {:relation/source source
                                  :relation/notes notes}
 
@@ -232,7 +232,7 @@
     :data {:content (translate :command.chat-input.relation.add/success)}))
 
 (defn relation-view [conn {{{{user :value} :user
-                             {search :value} :search} :options} :data
+                             {_search :value} :search} :options} :data
                            :as interaction} {translate :translator}]
   (d/q '[:find (pull ?e [:relation/target :relation/title :relation/notes])
          :in $ ?source
@@ -242,121 +242,102 @@
 
 ;;; Command exportation (transformation) facilities.
 
-;; The interaction commands. The key is the name and the value contains properties useful for dispatchers (e.g. `:fn`).
-;; :options is an array of maps instead of a map of maps since the order matters to Discord.
-
 (def commands
-  "The global application commands."
-  {:chat-input {"animanga" {:fn animanga
-                            :description "Search for an anime or manga."
-                            :options [{:type (:integer command-option-types)
-                                       :name "query"
-                                       :description "The anime or manga to search for."
-                                       :required true
-                                       :autocomplete animanga-autocomplete}]}
-                "avatar" {:fn avatar
-                          :description "Displays a user's avatar."
-                          :options [{:type (:user command-option-types)
-                                     :name "user"
-                                     :description "The user to retrieve the avatar of. Defaults to the user who ran the command."}
-                                    {:type (:integer command-option-types)
-                                     :name "size"
-                                     :description "The maximum size of the avatar. May be lower if size is not available."
-                                     :choices (map #(zipmap [:name :value] (repeat %)) image-sizes)}]}
-                "purge" {:fn purge
-                         :description "Deletes messages from the channel."
-                         :options [{:type (:integer command-option-types)
-                                    :name "amount"
-                                    :description "The number of messages to remove (may remove less)."
-                                    :required true
-                                    :min-value 2
-                                    :max-value 100}]}}})
+  "The global application commands for Assistant."
+  [{:fn animanga
+    :name "animanga"
+    :description "Searches for anime and manga."
+    :options [{:type (:integer command-option-types)
+               :name "query"
+               :description "The anime/manga to search for."
+               :required? true
+               :autocomplete animanga-autocomplete}]}
+   {:fn avatar
+    :name "avatar"
+    :description "Displays a user's avatar."
+    :options [{:type (:user command-option-types)
+               :name "user"
+               :description "The user to retrieve the avatar of, defaulting to the user who ran the command."
+               :required? true}
+              {:type (:integer command-option-types)
+               :name "size"
+               :description "The largest size to return the avatar in. May be lower if size is not available."
+               :choices (map #(zipmap [:name :value] (repeat %)) image-sizes)}]}
+   {:fn purge
+    :name "purge"
+    :description "Deletes messages from the current text channel."
+    :options [{:type (:integer command-option-types)
+               :name "amount"
+               :description "The number of messages to delete."
+               :required? true
+               :min 2
+               :max 100}]}])
 
 (def guild-commands
-  "The application commands for individual, specialized guilds."
-  {"939382862401110058" {:chat-input {"emoji" {:description "Emoji facilities."
-                                               "create" {:fn emoji-create
-                                                         :description "Creates an emoji."
-                                                         :options [{:type (:string command-option-types)
-                                                                    :name "url"
-                                                                    :description "A URL pointing to the image to upload."
-                                                                    :required true}
-                                                                   {:type (:string command-option-types)
-                                                                    :name "name"
-                                                                    :description "The name of the emoji."
-                                                                    :required true}]}}
-                                      "relation" {:description "Relation graphing facilities."
-                                                  "add" {:fn relation-add
-                                                         :description "Adds a relation."
-                                                         :options [{:type (:user command-option-types)
-                                                                    :name "source"
-                                                                    :description "The user to start from."
-                                                                    :required true}
-                                                                   {:type (:string command-option-types)
-                                                                    :name "notes"
-                                                                    :description "The details about the relation."
-                                                                    :required true}
-                                                                   {:type (:string command-option-types)
-                                                                    :name "title"
-                                                                    :description "What the relation is about."}
-                                                                   {:type (:user command-option-types)
-                                                                    :name "target"
-                                                                    :description "The user to end at."}]}
-                                                  "view" {:fn relation-view
-                                                          :description "Views relations."
-                                                          :options [{:type (:user command-option-types)
-                                                                     :name "user"
-                                                                     :description "The user to lookup."}
-                                                                    {:type (:user command-option-types)
-                                                                     :name "search"
-                                                                     :description "The text to match for titles and notes."}]}}}}})
+  "The application commands for individual guilds."
+  {"939382862401110058" [{:name "emoji"
+                          :description "Emoji facilities."
+                          :options [{:fn emoji-create
+                                     :type (:sub-command command-option-types)
+                                     :name "create"
+                                     :description "Creates an emoji."
+                                     :options [{:type (:string command-option-types)
+                                                :name "url"
+                                                :description "A URL pointing to the image to upload."
+                                                :required? true}
+                                               {:type (:string command-option-types)
+                                                :name "name"
+                                                :description "The name of the emoji."
+                                                :required? true}]}]}
+                         {:name "relation"
+                          :description "Relation graphing facilities."
+                          :options [{:fn relation-create
+                                     :type (:sub-command command-option-types)
+                                     :name "create"
+                                     :description "Creates a relation."
+                                     :options [{:type (:user command-option-types)
+                                                :name "source"
+                                                :description "The user to start from."
+                                                :required? true}
+                                               {:type (:string command-option-types)
+                                                :name "notes"
+                                                :description "The details about the relation."
+                                                :required? true}
+                                               {:type (:string command-option-types)
+                                                :name "title"
+                                                :description "What the relation is about."}
+                                               {:type (:user command-option-types)
+                                                :name "target"
+                                                :description "The user to end at."}]}
+                                    {:fn relation-view
+                                     :type (:sub-command command-option-types)
+                                     :name "view"
+                                     :description "Displays relations."
+                                     :options [{:type (:user command-option-types)
+                                                :name "user"
+                                                :description "The user to look up."}
+                                               {:type (:user command-option-types)
+                                                :name "search"
+                                                :description "The text to match for titles and notes."}]}]}]})
 
-(def command-keys [:name :description :options :default-permission :type])
-(def command-option-keys [:type :name :description :required :choices :options :channel-types :min-value :max-value
-                          :autocomplete])
-
-(defn normalize [m name]
-  (dissoc (assoc m :name name) :fn :components))
-
-(defn normalize-option [option]
-  (let [option (rename-keys option {:channel-types :channel_types
-                                    :min-value :min_value
-                                    :max-value :max_value})]
-    (if (:autocomplete option)
-      (assoc option :autocomplete true)
-      option)))
-
-(defn normalize-command [command]
-  (let [command (rename-keys command {:default-permission :default_permission})]
-    (if (:options command)
-      (update command :options (partial map normalize-option))
-      command)))
-
-(defn transform-subs [subcommands]
-  (reduce-kv (fn [coll name option]
-               (let [[option subs] (split-keys (normalize-option (normalize option name)) command-option-keys)]
-                 (conj coll (if (seq subs)
-                              (assoc option
-                                :type (:sub-command-group command-option-types)
-                                :options (transform-subs subs))
-                              (assoc option :type (:sub-command command-option-types)))))) [] subcommands))
+(defn transform-options [options]
+  (map #(-> %
+          (dissoc :fn)
+          (update :autocomplete boolean)
+          (rename-keys {:required? :rqeuired
+                        :min :min_value
+                        :max :max_value
+                        :channels :channel-types})
+          (update :options transform-options)) options))
 
 (defn transform [commands]
-  (reduce-kv
-    (fn [coll type commands]
-      (concat coll
-        (reduce-kv
-          (fn [coll c-name command]
-            (let [[command subs] (split-keys (normalize-command (normalize command c-name)) command-keys)]
-              (conj coll (assoc (if (seq subs)
-                                  (assoc command :options (transform-subs subs))
-                                  command) :type (type command-types)))))
-          [] commands)))
-    [] commands))
+  (map #(-> %
+          (dissoc :fn)
+          (update :options transform-options)) commands))
 
 (def discord-commands (transform commands))
-(def discord-guild-commands (reduce-kv (fn [m guild-id commands]
-                                         (assoc m guild-id (transform commands))) {} guild-commands))
+(def discord-guild-commands (into {} (for [[gid commands] guild-commands]
+                                       [gid (transform commands)])))
 
 ;;; deps.edn
 
