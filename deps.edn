@@ -1,5 +1,7 @@
-{:deps {org.clojure/clojure {:mvn/version "1.10.3"}
+{:paths ["src" "resources"]
+ :deps {org.clojure/clojure {:mvn/version "1.11.0"}
         org.clojure/core.async {:mvn/version "1.5.648"}
+        org.clojure/tools.logging {:mvn/version "1.2.4"}
         kyleerhabor/strife {:git/url "https://github.com/KyleErhabor/strife"
                             :git/sha "01600718b6bdfc2cc53d3ced4c4df209473459ea"}
         aleph/aleph {:mvn/version "0.4.7"}
@@ -13,6 +15,13 @@
         hato/hato {:mvn/version "0.8.2"} ; to replace clj-http
         manifold/manifold {:mvn/version "0.2.3"}
         tick/tick {:mvn/version "0.5.0-RC5"}
-        tongue/tongue {:mvn/version "0.4.3"}}
+        tongue/tongue {:mvn/version "0.4.4"}}
  :aliases {:db {:jvm-opts ["--add-opens=java.base/java.nio=ALL-UNNAMED"
-                           "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED"]}}}
+                           "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED"]}
+           :log {:jvm-opts ["-Dclojure.tools.logging.factory=clojure.tools.logging.impl/slf4j-factory"]
+                 :extra-deps {ch.qos.logback/logback-classic {:mvn/version "1.2.11"}
+                              org.slf4j/jcl-over-slf4j {:mvn/version "1.7.36"}
+                              org.slf4j/jul-to-slf4j {:mvn/version "1.7.36"}
+                              org.slf4j/log4j-over-slf4j {:mvn/version "1.7.36"}
+                              org.slf4j/osgi-over-slf4j {:mvn/version "1.7.36"}
+                              org.slf4j/slf4j-api {:mvn/version "1.7.36"}}}}}

@@ -8,7 +8,7 @@
     [assistant.bot.util :refer [connect disconnect]]
     [assistant.bot.interaction.anilist :as anilist]
     [assistant.bot.interaction.util :refer [ephemeral image-sizes max-autocomplete-name-length]]
-    [assistant.util :refer [base64 hex->int split-keys truncate]]
+    [assistant.util :refer [base64 hex->int pause split-keys truncate]]
     [aleph.http :as http]
     [camel-snake-kebab.core :as csk]
     [cheshire.core :as che]
@@ -24,7 +24,8 @@
     [discljord.permissions :as ds.perms]
     [graphql-query.core :refer [graphql-query]]
     [hato.client :as hc]
-    [manifold.deferred :as mfd]
+    [manifold.deferred :as mfd :refer [let-flow]]
+    [strife.core :as strife]
     [tick.core :as tick]))
 
 (def kebab-kw (comp keyword csk/->kebab-case))
@@ -40,15 +41,12 @@
       (or (:nsfw (<! (get-channel! conn cid))) false)
       false)))
 
-(defn responder [conn inter]
-  (partial create-interaction-response! conn (:id inter) (:token inter)))
-
 (defn respond
   [conn inter & args]
-  (apply (responder conn inter) args))
+  (apply create-interaction-response! conn (:id inter) (:token inter) args))
 
-(defn error-data [s]
-  {:content s
+(defn error [content]
+  {:content content
    :flags ephemeral})
 
 ;;; HTTP
@@ -82,10 +80,10 @@
           adult? (:isAdult media)]
       (respond conn interaction (:channel-message-with-source interaction-response-types)
         :data (cond
-                (not media) (error-data (translate :not-found))
-                (and adult? (not (<! (nsfw conn interaction)))) (error-data (translate (keyword (str
-                                                                                                  "nsfw-"
-                                                                                                  (str/lower-case (:type media))))))
+                (not media) (error (translate :not-found))
+                (and adult? (not (<! (nsfw conn interaction)))) (error (translate (keyword (str
+                                                                                             "nsfw-"
+                                                                                             (str/lower-case (:type media))))))
                 :else {:embeds [(let [cover-image (:coverImage media)
                                       episodes (:episodes media)
                                       chapters (:chapters media)
@@ -159,13 +157,12 @@
                                      note))
                            :value (:id media)})}))))
 
-(defn avatar
-  [conn {{{{user :value} :user
-           {size :value
-            :or {size (last image-sizes)}} :size} :options
-          :as data} :data
-         member :member
-         :as interaction} _]
+(defn avatar [conn {{{{user :value} "user"
+                      {size :value
+                       :or {size (last image-sizes)}} "size"} :options
+                     :as data} :data
+                    :as interaction
+                    :keys [member]} _]
   (respond conn interaction (:channel-message-with-source interaction-response-types)
     :data {:content (let [user (or
                                  ;; Get the user from the user argument.
@@ -179,68 +176,40 @@
                           "Server: " (avatar-url member size))
                         user-url))}))
 
-(defn emoji-create [conn {{{{name :value} :name
-                            {url :value} :url} :options} :data
-                          :as interaction} _]
-  (clojure.pprint/pprint @(create-guild-emoji! conn (:guild-id interaction) name (str
-                                                                                   "data:image/jpeg;base64,"
-                                                                                   (base64 (:body (hc/get url {:http-client http-client})))) [])))
-
-(defn purge [conn {{{{amount :value} :amount} :options} :data
+(defn purge [conn {{{{amount :value} "amount"} :options} :data
                    cid :channel-id
                    :keys [member]
-                   :as interaction} {translate :translator
-                                     :keys [config]}]
-  (go
-    (let [respond (partial respond conn interaction (:channel-message-with-source interaction-response-types) :data)]
-      (cond
-        (not member)
-        (respond (error-data (translate :guild-only)))
+                   :as inter} {translate :translator
+                               :keys [config]}]
+  (let [respond (partial respond conn inter (:channel-message-with-source interaction-response-types) :data)]
+    (cond
+      (not member)
+      (respond (error (translate :guild-only)))
 
-        (not (ds.perms/has-permission-flag? :manage-messages (:permissions member)))
-        (respond (error-data (translate :missing-manage-messages)))
+      (not (ds.perms/has-permission-flag? :manage-messages (:permissions member)))
+      (respond (error (translate :missing-manage-messages)))
 
-        ;; Instead of fetching up to the number of messages to purge, this will fetch the maximum amount (100), then
-        ;; apply the filters, and take up to the number of messages requested to purge. This is because a collection of
-        ;; messages could be filtered and return less than what the user requested, which may be annoying.
-        :else (let [msgs (->> (<! (get-channel-messages! conn cid :limit 100))
-                           (filter #(< -14 (tick/days (tick/between (tick/now) (:timestamp %)))))
-                           (filter (complement :pinned))
-                           (take amount)
-                           (map :id))]
-                (if (seq msgs)
-                  (if (<! (if (= 1 (count msgs))
-                            (delete-message! conn cid (first msgs))
-                            (bulk-delete-messages! conn cid msgs)))
-                    (when (<! (respond {:content (translate :interaction.purge/success)}))
-                      (<! (timeout (or (:timeout (:purge (:chat-input (:global (:bot/commands config))))) config/purge-timeout)))
-                      (delete-original-interaction-response! conn (:application-id interaction) (:token interaction)))
-                    (respond (error-data (translate :interaction.purge/fail))))
-                  (respond (error-data (translate :interaction.purge/none)))))))))
+      ;; Instead of fetching up to the number of messages to purge, this will fetch the maximum amount (100), then apply
+      ;; the filters, and take up to the number of messages requested to purge. This is because a collection of messages
+      ;; could be filtered and return less than what the user requested, which may be annoying.
+      :else (let-flow [msgs (get-channel-messages! conn cid {:limit 100})
+                       ids (->> msgs
+                             (filter #(< -14 (tick/days (tick/between (tick/now) (:timestamp %)))))
+                             (filter (complement :pinned))
+                             (take amount)
+                             (map :id))]
+              (if (seq ids)
+                (let-flow [deleted? (if (= 1 (count ids))
+                                      (delete-message! conn cid (first ids))
+                                      (bulk-delete-messages! conn cid ids))]
+                  (if deleted?
+                    (mfd/chain (respond {:content (translate :interaction.purge/success)})
+                      (fn [_] (pause (or (:timeout (:purge (:chat-input (:global (:bot/commands config))))) config/purge-timeout)))
+                      (fn [_] (delete-original-interaction-response! conn (:application-id inter) (:token inter))))
+                    (respond (error (translate :interaction.purge/fail)))))
+                (respond (error (translate :interaction.purge/none))))))))
 
-;; TODO: Consider abstracting away the `conn` parameter and `db/conn` usage.
-(defn relation-create [conn {{{{source :value} :source
-                               {target :value} :target
-                               {_title :value} :title
-                               {notes :value} :notes} :options} :data
-                             :as interaction} {translate :translator}]
-  (d/transact! db/conn [(cond-> {:relation/source source
-                                 :relation/notes notes}
-
-                          target (assoc :relation/target target))])
-  (respond conn interaction (:channel-message-with-source interaction-response-types)
-    :data {:content (translate :command.chat-input.relation.add/success)}))
-
-(defn relation-view [conn {{{{user :value} :user
-                             {_search :value} :search} :options} :data
-                           :as interaction} {translate :translator}]
-  (d/q '[:find (pull ?e [:relation/target :relation/title :relation/notes])
-         :in $ ?source
-         :where [?e :relation/source ?source]] @db/conn user)
-  (respond conn interaction (:channel-message-with-source interaction-response-types)
-    :data (error-data (translate :not-found))))
-
-;;; Command exportation (transformation) facilities.
+;;; Command details for exportation
 
 (def commands
   "The global application commands for Assistant."
@@ -275,21 +244,7 @@
 
 (def guild-commands
   "The application commands for individual guilds."
-  {"939382862401110058" [{:name "emoji"
-                          :description "Emoji facilities."
-                          :options [{:fn emoji-create
-                                     :type (:sub-command command-option-types)
-                                     :name "create"
-                                     :description "Creates an emoji."
-                                     :options [{:type (:string command-option-types)
-                                                :name "url"
-                                                :description "A URL pointing to the image to upload."
-                                                :required? true}
-                                               {:type (:string command-option-types)
-                                                :name "name"
-                                                :description "The name of the emoji."
-                                                :required? true}]}]}
-                         {:name "relation"
+  {"939382862401110058" [{:name "relation"
                           :description "Relation graphing facilities."
                           :options [{:fn relation-create
                                      :type (:sub-command command-option-types)
@@ -320,24 +275,8 @@
                                                 :name "search"
                                                 :description "The text to match for titles and notes."}]}]}]})
 
-(defn transform-options [options]
-  (map #(-> %
-          (dissoc :fn)
-          (update :autocomplete boolean)
-          (rename-keys {:required? :rqeuired
-                        :min :min_value
-                        :max :max_value
-                        :channels :channel-types})
-          (update :options transform-options)) options))
-
-(defn transform [commands]
-  (map #(-> %
-          (dissoc :fn)
-          (update :options transform-options)) commands))
-
-(def discord-commands (transform commands))
-(def discord-guild-commands (into {} (for [[gid commands] guild-commands]
-                                       [gid (transform commands)])))
+(def discord-commands (strife/transform commands))
+(def discord-guild-commands (into {} (reduce-kv #(assoc %1 %2 (strife/transform %3)) {} guild-commands)))
 
 ;;; deps.edn
 
@@ -350,8 +289,7 @@
       (println @(if (= :global scope)
                   (bulk-overwrite-global-application-commands! conn appid discord-commands)
                   (bulk-overwrite-guild-application-commands! conn appid scope (get discord-guild-commands scope)))))
-    (disconnect chans)
-    (shutdown-agents)))
+    (disconnect chans)))
 
 (comment
   #_{:clj-kondo/ignore [:unresolved-namespace]}

@@ -1,6 +1,8 @@
 (ns assistant.util
   (:import (java.util Base64))
-  (:require [clojure.string :as str]))
+  (:require
+    [clojure.string :as str]
+    [manifold.deferred :as mfd]))
 
 (defn base64
   "Converts string `s` into its base 64 representation."
@@ -20,6 +22,9 @@
   [& body]
   `(try ~@body
      (catch Exception _#)))
+
+(defn pause [interval]
+  (mfd/timeout! (mfd/deferred) interval nil))
 
 (defn precision
   "Round a double to the given precision (number of significant digits). Borrowed from
