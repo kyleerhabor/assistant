@@ -8,5 +8,7 @@
   (let [{:keys [event-ch msg-ch]
          :as chans} (connect config)]
     @(mfs/consume (fn [[type data]]
-                    (event/handle msg-ch type data {:config config})) event-ch)
+                    (try (event/handle msg-ch type data {:config config})
+                      (catch Exception e ; need something better
+                        (println e)))) event-ch)
     (disconnect chans)))
