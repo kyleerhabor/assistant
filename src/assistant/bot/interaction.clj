@@ -183,8 +183,6 @@
   (str/replace s #"\[(.+?)\]" (fn [[_ term]]
                                 (str "[" term "](https://www.urbandictionary.com/define.php?term=" (str/replace term " " "%20") ")"))))
 
-(normalize-urban "Publically declaring [a foreign] government to be an enemy that stands in the way of \"freedom\"")
-
 (defn urban [conn {{{{term :value} "term"} :options} :data
                    :as inter} {translate :translator}]
   (let-flow [res (http/get "https://api.urbandictionary.com/v0/define" {:as :json
