@@ -157,10 +157,9 @@
   (let-flow [_ (respond conn inter (:channel-message-with-source interaction-response-types)
                  :data {:content question})
              msg (get-original-interaction-response! conn (:application-id inter) (:token inter))
-             cid (:channel-id inter)
-             mid (:id msg)]
-    (create-reaction! conn cid mid "👍")
-    (create-reaction! conn cid mid "👎")))
+             react! (partial create-reaction! conn (:channel-id inter) (:id msg))]
+    (react! "👍")
+    (react! "👎")))
 
 (defn purge [conn {{{{amount :value} "amount"} :options} :data
                    cid :channel-id
