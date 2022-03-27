@@ -5,16 +5,17 @@
     [assistant.config :as config]
     [assistant.bot.util :refer [connect disconnect]]
     [assistant.bot.interaction.anilist :as anilist]
-    [assistant.bot.interaction.util :refer [ephemeral image-sizes max-autocomplete-name-length]]
+    [assistant.bot.interaction.util :refer [component-types ephemeral image-sizes max-autocomplete-name-length]]
     [assistant.util :refer [hex->int pause rpartial truncate]]
     [aleph.http :as http]
     [camel-snake-kebab.core :as csk]
     [discljord.cdn :as ds.cdn]
     [discljord.formatting :as ds.fmt]
     [discljord.messaging :refer [bulk-delete-messages! bulk-overwrite-global-application-commands!
-                                 bulk-overwrite-guild-application-commands! create-interaction-response!
+                                 bulk-overwrite-guild-application-commands! create-interaction-response! create-reaction!
                                  delete-message! delete-original-interaction-response! get-channel!
-                                 get-channel-messages! get-current-application-information!]]
+                                 get-channel-messages! get-current-application-information!
+                                 get-original-interaction-response!]]
     [discljord.messaging.specs :refer [command-option-types interaction-response-types]]
     [discljord.permissions :as ds.perms]
     [graphql-query.core :refer [graphql-query]]
@@ -23,6 +24,11 @@
     [tick.core :as tick]))
 
 (def kebab-kw (comp keyword csk/->kebab-case))
+
+(defn user
+  "Returns the user who ran the interaction."
+  [inter]
+  (:user (or (:member inter) inter)))
 
 (defn avatar-url [user size]
   (ds.cdn/resize (ds.cdn/effective-user-avatar user) size))
@@ -146,6 +152,16 @@
                           "Server: " (avatar-url member size))
                         user-url))}))
 
+(defn poll [conn {{{{question :value} "question"} :options} :data
+                  :as inter} {translate :translator}]
+  (let-flow [_ (respond conn inter (:channel-message-with-source interaction-response-types)
+                 :data {:content question})
+             msg (get-original-interaction-response! conn (:application-id inter) (:token inter))
+             cid (:channel-id inter)
+             mid (:id msg)]
+    (create-reaction! conn cid mid "👍")
+    (create-reaction! conn cid mid "👎")))
+
 (defn purge [conn {{{{amount :value} "amount"} :options} :data
                    cid :channel-id
                    :keys [member]
@@ -198,7 +214,7 @@
               (error (translate :not-found))))))
 
 (defn urban-autocomplete [conn {{{{term :value} "term"} :options} :data
-                                :as inter} {translate :translator}]
+                                :as inter} _]
   (let-flow [res (http/get "https://api.urbandictionary.com/v0/autocomplete-extra" {:as :json
                                                                                     :query-params {:term term}})]
     (respond conn inter (:application-command-autocomplete-result interaction-response-types)
@@ -230,6 +246,13 @@
                :name "size"
                :description "The largest size to return the avatar in. May be lower if size is not available."
                :choices (map #(zipmap [:name :value] (repeat %)) image-sizes)}]}
+   {:fn poll
+    :name "poll"
+    :description "Creates a poll."
+    :options [{:type (:string command-option-types)
+               :name "question"
+               :description "The question to ask."
+               :required? true}]}
    {:fn purge
     :name "purge"
     :description "Deletes messages from the current text channel."

@@ -8,7 +8,8 @@
   "https://discord.com/developers/docs/interactions/message-components#component-object-component-types"
   {:action-row 1
    :button 2
-   :select-menu 3})
+   :select-menu 3
+   :text-input 4})
 
 ;; From 16 to 4096
 (def image-sizes (map #(long (Math/pow 2 %)) (range 4 13)))

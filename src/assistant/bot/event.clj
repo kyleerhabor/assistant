@@ -9,16 +9,21 @@
   "Handler for Discord API events."
   (fn [_ type _ _] type))
 
+(defn get-command [inter finder]
+  (or (finder commands) (finder (get guild-commands (:guild-id inter)))))
+
 (defmethod handle :interaction-create
   [conn _ inter options]
-  (let [command (partial find-command inter)]
-    ;; Probably wrong.
-    (if-let [res (or (command commands) (command (get guild-commands (:guild-id inter))))]
-      (let [res (update-in res [:out :options] strife/mapify)
-            command (strife/runner res)
-            inter (assoc-in inter [:data :options] (strife/mapify (:options (:in res))))
-            options (assoc options :translator (partial i18n/translate (:locale inter)))]
-        (command conn inter options)))))
+  (let [options (assoc options :translator (partial i18n/translate (:locale inter)))]
+    (if-let [command (get-command inter (partial strife/option (:name (:interaction (:message inter)))))]
+      (if-let [component (:component command)]
+        (component conn inter options))
+      (if-let [res (get-command inter (partial find-command inter))]
+        (let [res (update-in res [:out :options] strife/mapify)
+              command (strife/runner res)
+              inter (assoc-in inter [:data :options] (strife/mapify (:options (:in res))))
+              options (assoc options :translator (partial i18n/translate (:locale inter)))]
+          (command conn inter options))))))
 
 (defmethod handle :ready
   [_ _ data _]
