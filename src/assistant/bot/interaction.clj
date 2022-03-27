@@ -197,6 +197,16 @@
                                    :value (normalize-urban (:example term))}]}]}
               (error (translate :not-found))))))
 
+(defn urban-autocomplete [conn {{{{term :value} "term"} :options} :data
+                                :as inter} {translate :translator}]
+  (let-flow [res (http/get "https://api.urbandictionary.com/v0/autocomplete-extra" {:as :json
+                                                                                    :query-params {:term term}})]
+    (respond conn inter (:application-command-autocomplete-result interaction-response-types)
+      :data {:choices (for [r (:results (:body res))
+                            :let [term (:term r)]]
+                        {:name term
+                         :value term})})))
+
 ;;; Command details for exportation
 
 (def commands
@@ -231,21 +241,16 @@
                :max 100}]}
    {:fn urban
     :name "urban"
-    :description "Searches the Urban Dictionary."
+    :description "Searches Urban Dictionary."
     :options [{:type (:string command-option-types)
                :name "term"
-               :description "The word/phrase to search for."
-               :required? true}]}])
+               :description "The term to search for."
+               :required? true
+               :autocomplete urban-autocomplete}]}])
 
 (def guild-commands
   "The application commands for individual guilds."
-  {"939382862401110058" [{:fn urban
-                          :name "urban"
-                          :description "Searches the Urban Dictionary."
-                          :options [{:type (:string command-option-types)
-                                     :name "term"
-                                     :description "The word/phrase to search for."
-                                     :required? true}]}]})
+  {"939382862401110058" []})
 
 (def discord-commands (strife/transform commands))
 (def discord-guild-commands (update-vals guild-commands strife/transform))
