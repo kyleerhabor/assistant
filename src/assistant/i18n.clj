@@ -20,6 +20,7 @@
         :doujinshi "Doujinshi"
         :end-date "End Date"
         :episodes "Episodes"
+        :example "Example"
         :finished "Finished"
         :format "Format"
         :game "Game"
@@ -125,7 +126,8 @@
                       :purge {:fail "Purge failed."
                               ;; "to purge"?
                               :none "No messages."
-                              :success "Purge successful."}}
+                              :success "Purge successful."}
+                      :urban {:example "Example"}}
         :command {:chat-input {:relation {:add {:success "Relation added."}
                                           }}}
         :tongue/missing-key nil}

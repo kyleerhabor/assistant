@@ -7,6 +7,7 @@
     [assistant.bot.interaction.anilist :as anilist]
     [assistant.bot.interaction.util :refer [ephemeral image-sizes max-autocomplete-name-length]]
     [assistant.util :refer [hex->int pause rpartial truncate]]
+    [aleph.http :as http]
     [camel-snake-kebab.core :as csk]
     [discljord.cdn :as ds.cdn]
     [discljord.formatting :as ds.fmt]
@@ -132,7 +133,6 @@
                      :as data} :data
                     :as inter
                     :keys [member]} _]
-  (clojure.pprint/pprint inter)
   (respond conn inter (:channel-message-with-source interaction-response-types)
     :data {:content (let [user (or
                                  ;; Get the user from the user argument.
@@ -179,6 +179,26 @@
                     (respond (error (translate :interaction.purge/fail)))))
                 (respond (error (translate :interaction.purge/none))))))))
 
+(defn normalize-urban [s]
+  (str/replace s #"\[(.+?)\]" (fn [[_ term]]
+                                (str "[" term "](https://www.urbandictionary.com/define.php?term=" (str/replace term " " "%20") ")"))))
+
+(normalize-urban "Publically declaring [a foreign] government to be an enemy that stands in the way of \"freedom\"")
+
+(defn urban [conn {{{{term :value} "term"} :options} :data
+                   :as inter} {translate :translator}]
+  (let-flow [res (http/get "https://api.urbandictionary.com/v0/define" {:as :json
+                                                                        :query-params {:term term}})]
+    (respond conn inter (:channel-message-with-source interaction-response-types)
+      :data (if-let [term (first (:list (:body res)))]
+              {:embeds [{;; The urban dictionary term does not always match exactly with the user's input.
+                         :title (:word term)
+                         :description (normalize-urban (:definition term))
+                         :url (:permalink term)
+                         :fields [{:name (translate :example)
+                                   :value (normalize-urban (:example term))}]}]}
+              (error (translate :not-found))))))
+
 ;;; Command details for exportation
 
 (def commands
@@ -210,11 +230,24 @@
                :description "The number of messages to delete."
                :required? true
                :min 2
-               :max 100}]}])
+               :max 100}]}
+   {:fn urban
+    :name "urban"
+    :description "Searches the Urban Dictionary."
+    :options [{:type (:string command-option-types)
+               :name "term"
+               :description "The word/phrase to search for."
+               :required? true}]}])
 
 (def guild-commands
   "The application commands for individual guilds."
-  {"939382862401110058" []})
+  {"939382862401110058" [{:fn urban
+                          :name "urban"
+                          :description "Searches the Urban Dictionary."
+                          :options [{:type (:string command-option-types)
+                                     :name "term"
+                                     :description "The word/phrase to search for."
+                                     :required? true}]}]})
 
 (def discord-commands (strife/transform commands))
 (def discord-guild-commands (update-vals guild-commands strife/transform))

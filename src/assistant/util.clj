@@ -12,9 +12,9 @@
 (defn hex->int
   "Converts hexadecimal string `hex` into its integer representation. Can optionally be prefixed with `#`."
   [hex]
-  (parse-long (if (str/starts-with? hex "#")
-                (subs hex 1)
-                hex) 16))
+  (Long/parseLong (if (str/starts-with? hex "#")
+                    (subs hex 1)
+                    hex) 16))
 
 (defmacro ignore-ex
   "Evaluates `body`, returning the value of the last expression or `nil` if an exception is caught. Will not catch

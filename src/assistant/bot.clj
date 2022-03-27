@@ -1,5 +1,6 @@
 (ns assistant.bot
   (:require
+    [clojure.tools.logging :as log]
     [assistant.bot.event :as event]
     [assistant.bot.util :refer [connect disconnect]]
     [manifold.stream :as mfs]))
@@ -10,5 +11,5 @@
     @(mfs/consume (fn [[type data]]
                     (try (event/handle msg-ch type data {:config config})
                       (catch Exception e ; need something better
-                        (println e)))) event-ch)
+                        (log/error e)))) event-ch)
     (disconnect chans)))
