@@ -2,7 +2,10 @@
   (:require
     [clojure.string :as str]
     [assistant.bot.interaction.util :refer [max-autocomplete-choices max-embed-description-length]]
-    [assistant.util :refer [truncate]]))
+    [assistant.util :refer [truncate]]
+    [aleph.http :as http]
+    [cheshire.core :as che]
+    [manifold.deferred :as mfd]))
 
 (def country-codes {"JP" "🇯🇵"
                     "CN" "🇨🇳"
@@ -79,3 +82,11 @@
       [:id :format
        [:title
         [:english :romaji]]]]]]))
+
+;;; HTTP
+
+(defn query [graphql]
+  (mfd/chain (http/post "https://graphql.anilist.co/" {:as :json
+                                                       :body (che/generate-string {:query graphql})
+                                                       :content-type :json})
+    :body :data))
