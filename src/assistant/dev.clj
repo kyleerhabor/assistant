@@ -16,8 +16,8 @@
         appid (:id @(get-current-application-information! conn))]
     (println "Global:" @(bulk-overwrite-global-application-commands! conn appid discord-commands))
     (doseq [[gid commands] discord-guild-commands]
-      (println (str "Guild (" gid "): " @(bulk-overwrite-guild-application-commands! conn appid gid
-                                           (get discord-guild-commands gid)))))
+      (println (str "Guild (" gid "): "
+                 @(bulk-overwrite-guild-application-commands! conn appid gid commands))))
     (disconnect chans)))
 
 (comment

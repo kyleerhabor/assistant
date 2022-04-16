@@ -79,7 +79,7 @@ individual configurations. For example, the following would:
   (China and Taiwan).
 
 Note that the `report` and `translate` commands don't actually exist.
-```clj
+```clojure
 {:bot/commands {:global {:chat-input {:purge {:timeout 3000}}}
                 "939382862401110058" {:user {:report {:channel-id "940331535196901386"}}
                                       :message {:translate {:languages [:en-US :en-GB :zh-CN :zh-TW]}}}}}
@@ -89,13 +89,13 @@ Note that the `report` and `translate` commands don't actually exist.
 
 To start Assistant, run:
 
-```sh
+```bash
 clojure -M -m assistant.core ...
 ```
 The `...` represents the list of [configuration files](#configuration) to use. For example, the following would read,
 parse, and merge `config.edn` and `secrets.edn` from left to right, with the right taking precedence in the event of
 duplication.
-```sh
+```bash
 clojure -M -m assistant.core config.edn secrets.edn
 ```
 

@@ -1,20 +1,16 @@
 (ns assistant.bot.interaction
   (:require
     [clojure.string :as str]
-    [clojure.tools.logging :as log]
     [assistant.config :as config]
-    [assistant.bot.util :refer [connect disconnect]]
     [assistant.bot.interaction.anilist :as anilist]
-    [assistant.bot.interaction.util :refer [component-types ephemeral image-sizes max-autocomplete-name-length]]
-    [assistant.util :refer [hex->int pause rpartial truncate]]
+    [assistant.bot.interaction.util :refer [ephemeral image-sizes max-autocomplete-name-length]]
+    [assistant.util :refer [hex->int pause truncate]]
     [aleph.http :as http]
     [camel-snake-kebab.core :as csk]
     [discljord.cdn :as ds.cdn]
     [discljord.formatting :as ds.fmt]
-    [discljord.messaging :refer [bulk-delete-messages! bulk-overwrite-global-application-commands!
-                                 bulk-overwrite-guild-application-commands! create-interaction-response! create-reaction!
-                                 delete-message! delete-original-interaction-response! get-channel!
-                                 get-channel-messages! get-current-application-information!
+    [discljord.messaging :refer [bulk-delete-messages! create-interaction-response! create-reaction! delete-message!
+                                 delete-original-interaction-response! get-channel! get-channel-messages!
                                  get-original-interaction-response!]]
     [discljord.messaging.specs :refer [command-option-types interaction-response-types]]
     [discljord.permissions :as ds.perms]
@@ -84,12 +80,14 @@
                                                    :inline true}]
                                            ;; Anime
                                            episodes (conj {:name (translate :episodes)
-                                                           :value (translate :interaction.animanga/episodes episodes (:duration media))
+                                                           :value (translate :interaction.animanga/episodes episodes
+                                                                    (:duration media))
                                                            :inline true})
 
                                            ;; Manga
                                            chapters (conj {:name (translate :chapters)
-                                                           :value (translate :interaction.animanga/chapters chapters (:volumes media))
+                                                           :value (translate :interaction.animanga/chapters chapters
+                                                                    (:volumes media))
                                                            :inline true})
                                            (and (not chapters) volumes) (conj {:name (translate :volumes)
                                                                                :value volumes
@@ -153,7 +151,7 @@
                         user-url))}))
 
 (defn poll [conn {{{{question :value} "question"} :options} :data
-                  :as inter} {translate :translator}]
+                  :as inter} _]
   (let-flow [_ (respond conn inter (:channel-message-with-source interaction-response-types)
                  :data {:content question})
              msg (get-original-interaction-response! conn (:application-id inter) (:token inter))
@@ -279,6 +277,5 @@
 
 (comment
   #_{:clj-kondo/ignore [:unresolved-namespace]}
-
   ;; Sets the translator. Useful for inline evaluation in editors.
   (def translate (partial assistant.i18n/translate :en-US)))
