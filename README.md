@@ -1,7 +1,5 @@
 # Assistant
 
-![Banner](./banner.png)
-
 A Discord bot to assist my everyday needs.
 
 [Invite (Private)](https://discord.com/api/oauth2/authorize?client_id=856158596344709130&permissions=9216&scope=bot%20applications.commands)
@@ -31,10 +29,10 @@ I yearned for a bot capable of providing a simple interface and experience, but 
 Assistant was created to address those issues. The adoption of interactions contributes to a consistent system all users
 are familiar with and can benefit from (no help command!). Commands are designed to be minimalistic by only displaying
 the information essential to users, with options for configuration and convenient defaults where they make sense. When
-it's not possible to be simple, the project will refuse a feature or compromise where possible. For example, while a
+it's not possible to be simple, the project will refuse a feature or come to a compromise. For example, while a
 [pick command](https://github.com/KyleErhabor/assistant/issues/17) would be useful, Discord has no support for variadic
-arguments, therefore it hasn't been implemented. The `/animanga` command, on the other hand, only accepts an ID for its
-`query` parameter due to anime and manga sharing identical titles. To alleviate the burden, the command supports
+arguments, therefore it hasn't been adopted. The `/animanga` command, on the other hand, only accepts an ID for its
+`query` parameter due to many anime and manga sharing identical titles. To alleviate the burden, the command supports
 autocomplete and maps titles to their IDs. Assistant's principles are based on what makes traditional commands and slash
 commands appealing to developers and users and I hope you enjoy its design philosophy.
 
@@ -53,8 +51,7 @@ To invite your own instance of Assistant, use the following invite link, replaci
 ### Download
 
 You can download the project with `git clone https://github.com/KyleErhabor/assistant` or from the
-[releases](https://github.com/KyleErhabor/assistant/releases) tab on GitHub. Downloading with `git clone` is useful when
-you'd like the latest features, but don't mind the potential bugs it may have.
+[releases](https://github.com/KyleErhabor/assistant/releases) tab on GitHub.
 
 ### Configuration
 
