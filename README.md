@@ -23,10 +23,9 @@ to ignore the surplus of information, but when whole systems are designed under 
 experience as a user. Instead, I prefer to design commands around simplicity and options for details. In the past, this
 meant using named parameters (with dashes usually, such as `-f`, `--flag`, `--flag=value`, and `--flag="some value"`),
 resolvers (or types), comprehensive documentation (consistent and accessible via a help command, wiki, website, etc.),
-and more, which were notoriously difficult for users to comprehend. Today, however, slash commands solve this issue with
-its universal interface, making such dreams reality.
+and more, which were notoriously difficult for users to comprehend. Today, however, slash commands trivialize such
+problems and make dreams realizable.
 
-<!-- "wanted" or "yearned for"? -->
 I wanted a bot capable of providing a simple interface and experience, but couldn't find one I liked. In protest,
 Assistant was created to address those issues. The adoption of interactions contributes to a consistent system all users
 are familiar with and can benefit from (no help command!). Commands are designed to be minimalistic by only displaying
