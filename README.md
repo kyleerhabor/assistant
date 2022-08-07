@@ -15,28 +15,30 @@ one another. Consequently, users were forced to learn each bot's language and vo
 
 With the introduction of interactions, many bots replaced their systems with slash commands but retained the gimmicks
 and complexities of their former implementations. Commands are often conflated with non-essential information or details
-the user did not request for. For example, while the `/avatar` command is meant to display a user's avatar, bots often
-include extra details, such as who's avatar it is (e.g. "Avatar for Klay#0427"), links to additional formats and sizes,
-who ran the command, the guild icon, and more, despite none of it being requested or essential. While many developers
-believe that the information can be useful and merely ignored, I believe users should receive the information they
-need and request the extra they want. Previously, this meant using named parameters
-(with dashes usually, like `-f`, `--flag`, `--flag=value`, and `--flag="some value"`), resolvers (or types),
-documentation (help command, wiki, website, etc.), and more, which were notoriously difficult for users to comprehend.
-Today, however, there's no reason why this can't be a reality.
+the user did not ask for. For example, while an `/avatar` command could *just* display a user's avatar, many bots add
+supplemental details, such as by labeling who the avatar belongs to (e.g. "Avatar for Klay#7053"), linking to
+additional formats and sizes, stating who ran the command, providing an option to retrieve the guild icon, and more in
+spite of it all creating needless complexity for the user. It may be easy to dismiss such concerns by encouraging users
+to ignore the surplus of information, but when whole systems are designed under this principle, it begins to hurt the
+experience as a user. Instead, I prefer to design commands around simplicity and options for details. In the past, this
+meant using named parameters (with dashes usually, such as `-f`, `--flag`, `--flag=value`, and `--flag="some value"`),
+resolvers (or types), comprehensive documentation (consistent and accessible via a help command, wiki, website, etc.),
+and more, which were notoriously difficult for users to comprehend. Today, however, slash commands solve this issue with
+its universal interface, making such dreams reality.
 
 <!-- "wanted" or "yearned for"? -->
-I yearned for a bot capable of providing a simple interface and experience, but couldn't find one I liked. In protest,
+I wanted a bot capable of providing a simple interface and experience, but couldn't find one I liked. In protest,
 Assistant was created to address those issues. The adoption of interactions contributes to a consistent system all users
 are familiar with and can benefit from (no help command!). Commands are designed to be minimalistic by only displaying
 the information essential to users, with options for configuration and convenient defaults where they make sense. When
-it's not possible to be simple, the project will refuse a feature or come to a compromise. For example, while a
-[pick command](https://github.com/KyleErhabor/assistant/issues/17) would be useful, Discord has no support for variadic
-arguments, therefore it hasn't been adopted. The `/animanga` command, on the other hand, only accepts an ID for its
-`query` parameter due to many anime and manga sharing identical titles. To alleviate the burden, the command supports
-autocomplete and maps titles to their IDs. Assistant's principles are based on what makes traditional commands and slash
-commands appealing to developers and users and I hope you enjoy its design philosophy.
+simplicity is not an option, the associated feature will be rejected or developed with a compromise. For example, while
+a [pick command](https://github.com/KyleErhabor/assistant/issues/17) would be useful, Discord does not support variadic
+arguments, therefore it hasn't been implemented. The `/animanga` command, on the other hand, only accepts an ID for its
+`query` parameter since many anime and manga share identical titles. To alleviate this burden, the command supports
+autocomplete, mapping titles to IDs. Assistant's principles are based on what makes traditional and slash commands
+appealing to developers and users so I hope you enjoy its design philosophy.
 
-*- Klay#0427*
+*- Klay#7053*
 
 ## Installing
 
@@ -56,8 +58,8 @@ You can download the project with `git clone https://github.com/KyleErhabor/assi
 ### Configuration
 
 Assistant accepts a list of files when running that will be parsed as [edn](https://github.com/edn-format/edn) and used
-throughout the application, giving you the flexibility to host multiple, ad hoc configurations
-(development, testing, production, etc.)
+throughout the application, giving you the flexibility to host multiple, arbitrary configurations (development, testing,
+production, etc.)
 
 #### `:bot/token`
 
@@ -85,7 +87,6 @@ Note that the `report` and `translate` commands don't actually exist.
 ### Running
 
 To start Assistant, run:
-
 ```bash
 clojure -M -m assistant.core ...
 ```
