@@ -2,6 +2,7 @@
   (:require
    [clojure.core.async :refer [<! go]]
    [clojure.java.io :as io]
+   [clojure.set :refer [rename-keys]]
    [clojure.string :as str]
    [kyleerhabor.assistant.bot.util :refer [avatar-url user]]
    [kyleerhabor.assistant.config :refer [config]]
@@ -58,24 +59,35 @@
                    nil)]
      (:handler (name cmds)))))
 
-;; Gross, but works. Please redo. This naive merging is really a bad idea for command-specific configuration (e.g.
-;; setting a timeout duration for a purge/delete command) since it'll be included.
-(def discord-commands [(merge
-                         {:name "avatar"}
-                         (:avatar (::commands config))
-                         {:options [(merge
-                                      {:type (:user command-option-types)
-                                       :name "user"}
-                                      (:user (:options (:avatar (::commands config)))))
-                                    (merge
-                                      {:type (:integer command-option-types)
-                                       :name "size"
-                                       :choices (map #(zipmap [:name :value] [(str %) %]) image-sizes)}
-                                      (:size (:options (:avatar (::commands config)))))
-                                    (merge
-                                      {:type (:boolean command-option-types)
-                                       :name "attach"}
-                                      (:attach (:options (:avatar (::commands config)))))]})])
+(def discord-commands*
+  [{:id :avatar
+    :name "avatar"
+    :options [{:id :user
+               :type (:user command-option-types)
+               :name "user"}
+              {:id :size
+               :type (:integer command-option-types)
+               :name "size"
+               :choices (map #(zipmap [:name :value] [(str %) %]) image-sizes)}
+              {:id :attach
+               :type (:boolean command-option-types)
+               :name "attach"}]}])
+
+(defn process-discord-command [cmd config]
+  (let [cmd* (merge (dissoc cmd :id) (-> config
+                                       ;; Not going to bother providing :dm_permission since it's deprecated.
+                                       (select-keys [:name :name-localizations
+                                                     :description :description-localizations
+                                                     ; Maybe add :choices and treat it as special?
+                                                     :dms?])
+                                       (rename-keys {:name-localizations :name_localizations
+                                                     :description-localizations :description_localizations
+                                                     :dms? :dm_permission})))]
+    (if (:options cmd*)
+      (update cmd* :options (partial map #(process-discord-command % ((:id %) (:options config)))))
+      cmd*)))
+
+(def discord-commands (map #(process-discord-command % ((:id %) (::commands config))) discord-commands*))
 
 (defn upload
   ([conn] (upload conn discord-commands))
