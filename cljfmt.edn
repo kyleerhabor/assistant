@@ -1,0 +1,2 @@
+{:remove-multiple-non-indenting-spaces? true
+ :indents ^:replace {#"^." [[:inner 0]]}}
