@@ -5,7 +5,7 @@
    [clojure.set :refer [rename-keys]]
    [clojure.string :as str]
    [kyleerhabor.assistant.bot.util :refer [avatar-url user]]
-   [kyleerhabor.assistant.bot.schema :refer [message-flags]]
+   [kyleerhabor.assistant.bot.schema :refer [max-get-channel-messages-limit message-flags]]
    [kyleerhabor.assistant.config :refer [config]]
    [discljord.messaging :as msg]
    [discljord.messaging.specs :refer [command-option-types interaction-response-types]])
@@ -38,59 +38,64 @@
         attach? (:value (option data "attach"))
         url (avatar-url user size)]
     (if attach?
-      [(respond inter {:type (:deferred-channel-message-with-source interaction-response-types)
-                       :handler (fn [_]
-                                  (let [path (.getPath (io/as-url url))
-                                        filename (subs path (inc (str/last-index-of path \/)))]
-                                                   ;; This opens a stream for the URL, which could be an expensive
-                                                   ;; operation. As Assistant is private, this isn't much of a problem
-                                                   ;; in terms of resource use, but is something to consider.
-                                                   ;;
-                                                   ;; TODO: Add error handling for when attaching the image would be too
-                                                   ;; large. Tried with a followup in a followup, but that didn't work. :(
-                                    [[:create-followup-message {:app-id (:application-id inter)
-                                                                :token (:token inter)
-                                                                :opts {:stream {:content url
-                                                                                :filename filename}}}]]))})]
+      [(respond inter
+         {:type (:deferred-channel-message-with-source interaction-response-types)
+          :handler (fn [_]
+                     (let [path (.getPath (io/as-url url))
+                           filename (subs path (inc (str/last-index-of path \/)))]
+                       ;; TODO: Add error handling for when attaching the image would be too large. I tried with a
+                       ;; followup in a followup, but that didn't work. :(
+                       [[:create-followup-message {:app-id (:application-id inter)
+                                                   :token (:token inter)
+                                                   :opts {:stream {:content url
+                                                                   :filename filename}}}]]))})]
       [(respond inter {:type (:channel-message-with-source interaction-response-types)
                        :opts {:data {:content url}}})])))
+
+(defn purge-result [inter n]
+  (respond inter
+    {:type (:channel-message-with-source interaction-response-types)
+     :opts {:data {:content (case n
+                              0 "Could not delete messages."
+                              1 "Deleted 1 message."
+                              (str "Deleted " n " messages."))
+                   :flags (:ephemeral message-flags)}}}))
 
 (defn purge [{{cid :channel-id
                :as inter} :interaction}]
   (let [amount (:value (option (:data inter) "amount"))]
-    [[:get-channel-messages {:channel-id cid
-                             :opts {:limit amount}
-                             :handler (fn [msgs]
-                                        ;; Does time manipulation *really* have anything to do with my problem?
-                                        (let [old (.minus (Instant/now) 14 ChronoUnit/DAYS)
-                                              ids (->> msgs
-                                                    (filter #(not (:pinned %)))
-                                                    ;; Flawed. It needs to account for Discord's perception of time—not
-                                                    ;; mine.
-                                                    (filter #(.isAfter (Instant/parse (:timestamp %)) old))
-                                                    (map :id))
-                                              many (count ids)]
-                                          (case many
-                                            0 [(respond inter {:type (:channel-message-with-source interaction-response-types)
-                                                               :opts {:data {:content "No messages to delete."
-                                                                             :flags (:ephemeral message-flags)}}})]
-                                            1 [[:delete-message {:channel-id cid
-                                                                 :message-id (first ids)
-                                                                 :handler (fn [success?]
-                                                                            [(respond inter {:type (:channel-message-with-source interaction-response-types)
-                                                                                             :opts {:data {:content (if success?
-                                                                                                                      "Deleted 1 message."
-                                                                                                                      "Could not delete message.")
-                                                                                                           :flags (:ephemeral message-flags)}}})])}]]
-                                            [[:bulk-delete-messages {:channel-id cid
-                                                                     :msg-ids ids
-                                                                     :handler (fn [success?]
-                                                                                [(respond inter {:type (:channel-message-with-source interaction-response-types)
-                                                                                                 :opts {:data {:content (if success?
-                                                                                                                          (str "Deleted " many " message.")
-                                                                                                                          "Could not delete messages.")
-                                                                                                               :flags (:ephemeral message-flags)}}})])}]])))}]]
-    #_[[:bulk-delete-messages {}]]))
+    [[:get-channel-messages
+      {:channel-id cid
+       ;; The filter may return less than the requested amount. To alleviate this burden for the user we're going to
+       ;; fetch the maximum amount of messages in a single request, run the filters, then take the requested amount.
+       ;; Note that the result could still return less than desired.
+       :opts {:limit max-get-channel-messages-limit}
+       :handler (fn [msgs]
+                  ;; Does time manipulation *really* have anything to do with my problem?
+                  (let [old (.minus (Instant/now) 14 ChronoUnit/DAYS)
+                        ids (->> msgs
+                              (filter #(not (:pinned %)))
+                              ;; Flawed. It should be measuring Discord's perception of time (i.e. not mine).
+                              (filter #(.isAfter (Instant/parse (:timestamp %)) old))
+                              (take amount)
+                              (map :id))
+                        n (count ids)
+                        deleted-response (fn [success?]
+                                           [(purge-result inter (if success? n 0))])]
+                    (case n
+                      0 [(respond inter
+                           {:type (:channel-message-with-source interaction-response-types)
+                            :opts {:data {:content "No messages to delete."
+                                          :flags (:ephemeral message-flags)}}})]
+                      ;; Bulk deletes require at least two messages.
+                      1 [[:delete-message
+                          {:channel-id cid
+                           :message-id (first ids)
+                           :handler deleted-response}]]
+                      [[:bulk-delete-messages
+                        {:channel-id cid
+                         :msg-ids ids
+                         :handler deleted-response}]])))}]]))
 
 ;; Straight up broken. The string keys represent the Discord form of command names, which is meant to be configurable.
 ;; This, however, treats it as static so a command can efficiently be navigated to.
