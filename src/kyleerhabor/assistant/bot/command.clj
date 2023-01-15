@@ -197,9 +197,10 @@
 
 (defn route [router reg] ; Note that :reg is stored in router, while the reg param is a "true" commands map.
   {:registry (get-in reg (interpose :options (:path router)))
-   :option (reduce (fn [m {:keys [name]
-                           :as opt}]
-                     (assoc m (:id (get (:registry router) name)) opt)) {} (:options (:option router)))})
+   :option (persistent! (reduce (fn [m {:keys [name]
+                                        :as opt}]
+                                  (assoc! m (:id (get (:registry router) name)) opt))
+                          (transient {}) (:options (:option router))))})
 
 (declare discord-option)
 
