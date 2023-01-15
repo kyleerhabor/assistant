@@ -62,7 +62,7 @@
         amount (:value (:amount (:options (:data inter))))]
     [[:get-channel-messages
       {:channel-id cid
-       ;; The filter may return less than the requested amount. To alleviate this burden for the user we're going to
+       ;; The filter may return less than the requested amount. To alleviate this burden for the user, we're going to
        ;; fetch the maximum amount of messages in a single request, run the filters, then take the requested amount.
        ;; Note that the result could still return less than desired.
        :opts {:limit max-get-channel-messages-limit}
@@ -80,7 +80,6 @@
                               (.plus 1 ChronoUnit/MINUTES))
                         ids (->> msgs
                               (filter #(not (:pinned %)))
-                              ;; Flawed. It should be measuring Discord's perception of time (i.e. not mine).
                               (filter #(.isAfter (Instant/parse (:timestamp %)) old))
                               (take amount)
                               (map :id))
@@ -120,9 +119,10 @@
                                             "if unavailable.")
                              ;; No, I'm not going to auto-generate the keys from a mere number. The keys are names for
                              ;; programmers (a separate space). I've dealt with worse cases of auto-generated names
-                             ;; (GraphQL struct generator in Swift), and it's not fun. The prefixed "s" means size. It's
-                             ;; possible to start a keyword with a number, but it's a bad practice with limited support:
-                             ;; https://clojure.org/guides/faq#keyword_number
+                             ;; (GraphQL struct generator in Swift), and it's not fun.
+                             ;;
+                             ;; The prefixed "s" means size. It's possible to start a keyword with a number, but it's a
+                             ;; bad practice with limited support: https://clojure.org/guides/faq#keyword_number
                              :choices (update-vals {:s16 16
                                                     :s32 32
                                                     :s64 64
@@ -134,9 +134,9 @@
                                                     :s4096 4096} choice)}
                       :attach {:name "attach"
                                :type (:boolean command-option-types)
-                                            ;; The second sentence could be improved. After what updates? Also, to users
-                                            ;; in the app, the first part may be confusing, since sending avatars as
-                                            ;; links appear as attachments.
+                               ;; The second sentence could be improved. After what updates? Also, to users
+                               ;; in the app, the first part may be confusing, since sending avatars as
+                               ;; links appear as attachments.
                                :description (str
                                               "Whether or not to send the avatar as an attachment. Useful for retaining"
                                               "avatars after updates.")}}}
@@ -196,7 +196,6 @@
         res))))
 
 (defn route [router reg] ; Note that :reg is stored in router, while the reg param is a "true" commands map.
-  ;; Update the interaction so its :options has its names resolved.
   {:registry (get-in reg (interpose :options (:path router)))
    :option (reduce (fn [m {:keys [name]
                            :as opt}]
