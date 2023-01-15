@@ -4,7 +4,8 @@
    [clojure.java.io :as io]
    [kyleerhabor.assistant.bot.command :as cmd]
    [kyleerhabor.assistant.effect :as eff]
-   [discljord.messaging :as msg]))
+   [discljord.messaging :as msg]
+   [taoensso.timbre :as log]))
 
 (defn stream [opts respond]
   (go
@@ -41,10 +42,13 @@
                                                (some-> handler (handle res conn))))}))
 
 (defn interaction-create [_ inter conn]
-  (if-let [route (cmd/route inter)]
-    (let [cmd (get-in cmd/commands (interpose :options (:path route)))
-          handler (:handler cmd)]
-      ;; We could go higher, but I can't be bothered to for now.
-      (effect conn (handler {:interaction inter})))))
+  (let [router (cmd/router inter cmd/commands-named)]
+    (if (seq (:path router))
+      (let [route (cmd/route router cmd/commands)
+            inter (assoc-in inter [:data :options] (:option route))
+            handler (:handler (:registry route))]
+        (effect conn (handler {:interaction inter})))
+      ;; Shouldn't happen.
+      (log/info "Command not found for interaction" inter))))
 
 (def handlers {:interaction-create [interaction-create]})

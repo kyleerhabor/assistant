@@ -7,8 +7,10 @@
    [kyleerhabor.assistant.bot.util :refer [avatar-url user]]
    [kyleerhabor.assistant.bot.schema :refer [max-get-channel-messages-limit message-flags]]
    [kyleerhabor.assistant.config :refer [config]]
+   [cprop.tools :refer [merge-maps]]
    [discljord.messaging :as msg]
-   [discljord.messaging.specs :refer [command-option-types interaction-response-types]])
+   [discljord.messaging.specs :refer [command-option-types interaction-response-types]]
+   [com.rpl.specter :as sp])
   (:import
    (java.time Instant)
    (java.time.temporal ChronoUnit)))
@@ -18,24 +20,18 @@
 
 (def max-image-size (last image-sizes))
 
-(defn option [opt name]
-  ;; The :options could be converted to a map prior and accessed as a get, but since most interactions will only list a
-  ;; few options, it would likely be an array map, killing the performance benefits and only leaving the nice API look.
-  (first (filter #(= name (:name %)) (:options opt))))
-
 (defn respond [inter data]
   [:create-interaction-response (merge
                                   {:id (:id inter)
                                    :token (:token inter)}
                                   data)])
 
-(defn avatar [{{:keys [data]
-                :as inter} :interaction}]
-  (let [user (if-let [opt (option data "user")]
-               (get (:users (:resolved data)) (:value opt))
+(defn avatar [{inter :interaction}]
+  (let [user (if-let [usero (:user (:options user))]
+               (get (:users (:resolved (:data inter))) (:value usero))
                (user inter))
-        size (or (:value (option data "size")) max-image-size)
-        attach? (:value (option data "attach"))
+        size (or (:value (:size (:options (:data inter)))) max-image-size)
+        attach? (:value (:attach (:options (:data inter))))
         url (avatar-url user size)]
     (if attach?
       [(respond inter
@@ -61,9 +57,9 @@
                               (str "Deleted " n " messages."))
                    :flags (:ephemeral message-flags)}}}))
 
-(defn purge [{{cid :channel-id
-               :as inter} :interaction}]
-  (let [amount (:value (option (:data inter) "amount"))]
+(defn purge [{inter :interaction}]
+  (let [cid (:channel-id inter)
+        amount (:value (:amount (:options (:data inter))))]
     [[:get-channel-messages
       {:channel-id cid
        ;; The filter may return less than the requested amount. To alleviate this burden for the user we're going to
@@ -97,60 +93,156 @@
                          :msg-ids ids
                          :handler deleted-response}]])))}]]))
 
-;; Straight up broken. The string keys represent the Discord form of command names, which is meant to be configurable.
-;; This, however, treats it as static so a command can efficiently be navigated to.
-(def commands {"avatar" {:id :avatar
-                         :handler avatar}
-               "purge" {:id :purge
-                        :handler purge}})
+(defn choice [v]
+  {:name (str v)
+   :value v})
+
+(def default-commands
+  {:avatar {:handler avatar
+            :name "avatar"
+            :description "Displays a user's avatar."
+            :options {:user {:name "user"
+                             :type (:user command-option-types)
+                             :description "The user to retrieve the avatar of, defaulting to whoever ran the command."}
+                      :size {:name "size"
+                             :type (:integer command-option-types)
+                             :description (str
+                                            "The largest size to return the avatar in. Actual avatar size will be lower"
+                                            "if unavailable.")
+                             ;; No, I'm not going to auto-generate the keys from a mere number. The keys are names for
+                             ;; programmers (a separate space). I've dealt with worse cases of auto-generated names
+                             ;; (GraphQL struct generator in Swift), and it's not fun. The prefixed "s" means size. It's
+                             ;; possible to start a keyword with a number, but it's a bad practice with limited support:
+                             ;; https://clojure.org/guides/faq#keyword_number
+                             :choices (update-vals {:s16 16
+                                                    :s32 32
+                                                    :s64 64
+                                                    :s128 128
+                                                    :s256 256
+                                                    :s512 512
+                                                    :s1024 1024
+                                                    :s2048 2048
+                                                    :s4096 4096} choice)}
+                      :attach {:name "attach"
+                               :type (:boolean command-option-types)
+                                            ;; The second sentence could be improved. After what updates? Also, to users
+                                            ;; in the app, the first part may be confusing, since sending avatars as
+                                            ;; links appear as attachments.
+                               :description (str
+                                              "Whether or not to send the avatar as an attachment. Useful for retaining"
+                                              "avatars after updates.")}}}
+   :purge {:handler purge
+           :name "purge"
+           :description "Deletes messages from a channel." ; Should it be "in" instead of "from"?
+           :options {:amount {:name "amount"
+                              :type (:integer command-option-types)
+                              :description "The largest number of messages to delete. Actual amount may be lower."
+                              :required? true
+                              :min-value 1
+                              :max-value 100}}}})
+
+(def commands (merge-maps default-commands (::commands config)))
+
+(defn commands-by-name [cmds]
+  (reduce
+    (fn [cmds [id cmd]]
+      (let [cmd (update cmd :options
+                  (fn index [opts]
+                    (reduce
+                      (fn [opts [id opt]]
+                        (let [;; Less concise than using update, but won't leave empty maps everywhere.
+                              opt (sp/multi-transform (sp/multi-path
+                                                        [(sp/must :options) (sp/terminal index)]
+                                                        [(sp/must :choices) (sp/terminal index)])
+                                    opt)]
+                          (assoc opts (:name opt) (assoc opt :id id)))) {} opts)))]
+        (assoc cmds (:name cmd) (assoc cmd :id id))))
+    {}
+    cmds))
+
+(def commands-named (commands-by-name commands))
 
 (def sub? (set (map command-option-types [:sub-command :sub-command-group])))
 
-(defn route [inter]
+(defn router [inter reg] ; Note that reg is a name resolver.
   (loop [opt (:data inter)
-         path [(:name opt)]]
-    (let [opt* (first (:options opt))]
-      (if (sub? (:type opt*))
-        (recur opt* (conj path (:name opt*)))
-        {:path path
-         :option opt}))))
+         reg reg
+         path []]
+    (let [name (:name opt)
+          res {:path path
+               :option opt
+               :registry reg}]
+      (if-let [item (get reg name)]
+        (let [path (conj path (:id item))
+              reg (:options item)
+              ;; Note the difference in scoping.
+              res (assoc res
+                    :path path
+                    :registry reg)]
+          (if-let [nopt (first (:options opt))]
+            (if (sub? (:type nopt))
+              (recur nopt reg path)
+              res)
+            res))
+        res))))
 
-(def discord-commands*
-  [{:id :avatar
-    :name "avatar"
-    :options [{:id :user
-               :type (:user command-option-types)
-               :name "user"}
-              {:id :size
-               :type (:integer command-option-types)
-               :name "size"
-               :choices (map #(zipmap [:name :value] [(str %) %]) image-sizes)}
-              {:id :attach
-               :type (:boolean command-option-types)
-               :name "attach"}]}
-   {:id :purge
-    :name "purge"
-    :options [{:id :amount
-               :type (:integer command-option-types)
-               :name "amount"
-               :required? true
-               :min-value 1
-               :max-value 100}]}])
+(defn route [router reg] ; Note that :reg is stored in router, while the reg param is a "true" commands map.
+  ;; Update the interaction so its :options has its names resolved.
+  {:registry (get-in reg (interpose :options (:path router)))
+   :option (reduce (fn [m {:keys [name]
+                           :as opt}]
+                     (assoc m (:id (get (:registry router) name)) opt)) {} (:options (:option router)))})
 
-(defn process-discord-command [cmd config]
-  (let [cmd* (-> (merge (dissoc cmd :id) (select-keys config [:name :name-localizations
-                                                              :description :description-localizations]))
-               (rename-keys {:name-localizations :name_localizations
-                             :description-localizations :description_localizations
-                             :required? :required
-                             :dms? :dm_permission
-                             :min-value :min_value
-                             :max-value :max_value}))]
-    (if (:options cmd*)
-      (update cmd* :options (partial map #(process-discord-command % ((:id %) (:options config)))))
-      cmd*)))
+(declare discord-option)
 
-(def discord-commands (map #(process-discord-command % ((:id %) (::commands config))) discord-commands*))
+(defn apply-discord-options [opt desc]
+  (sp/transform (sp/must :options)
+    (fn [opts]
+      (map
+        (fn [{:keys [id]
+              :as odesc}]
+          (discord-option (id opts) odesc)) (:options desc))) opt))
+
+(defn discord-option [opt desc]
+  (let [opt (-> opt
+              (select-keys [:type :name :description :required? :min-value :max-value :choices :options])
+              (rename-keys {:required? :required
+                            :min-value :min_value
+                            :max-value :max_value}))
+        opt (sp/transform (sp/must :choices)
+              (fn [choices]
+                (map
+                  (fn [{:keys [id]}]
+                    (id choices))
+                  (:choices desc)))
+              opt)]
+    (apply-discord-options opt desc)))
+
+(defn discord-command
+  "Converts a command into a representation (map) compatible with Discord (for upload)."
+  [cmd desc]
+  (let [cmd* (select-keys cmd [:name :description :options])]
+   (apply-discord-options cmd* desc)))
+
+(def discord-commands (map
+                         (fn [{:keys [id]
+                               :as desc}]
+                           (discord-command (id commands) desc))
+                         [{:id :avatar
+                           :options [{:id :user}
+                                     {:id :size
+                                      :choices [{:id :s16}
+                                                {:id :s32}
+                                                {:id :s64}
+                                                {:id :s128}
+                                                {:id :s256}
+                                                {:id :s512}
+                                                {:id :s1024}
+                                                {:id :s2048}
+                                                {:id :s4096}]}
+                                     {:id :attach}]}
+                          {:id :purge
+                           :options [{:id :amount}]}]))
 
 (defn upload
   ([conn] (upload conn discord-commands))
