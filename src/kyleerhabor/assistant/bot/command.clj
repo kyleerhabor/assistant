@@ -68,7 +68,16 @@
        :opts {:limit max-get-channel-messages-limit}
        :handler (fn [msgs]
                   ;; Does time manipulation *really* have anything to do with my problem?
-                  (let [old (.minus (Instant/now) 14 ChronoUnit/DAYS)
+                  ;;
+                  ;; It may be possible to extract the time from the interaction and use that to measure how old a
+                  ;; message is, but since :get-channel-messages is asynchronous, that time could be out of sync again.
+                  ;; This is most likely an uphill battle not worth fighting, so let's compromise instead.
+                  ;;
+                  ;; For ideas: https://github.com/DasWolke/SnowTransfer/blob/master/src/methods/Channels.ts#L420
+                  (let [old (-> (Instant/now)
+                              (.minus 14 ChronoUnit/DAYS)
+                              ;; In case time drifts between Assistant and Discord.
+                              (.plus 1 ChronoUnit/MINUTES))
                         ids (->> msgs
                               (filter #(not (:pinned %)))
                               ;; Flawed. It should be measuring Discord's perception of time (i.e. not mine).
