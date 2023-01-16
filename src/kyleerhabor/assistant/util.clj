@@ -26,3 +26,6 @@
    (let [out (ByteArrayOutputStream.)]
      (t/write (t/writer out type opts) val)
      out)))
+
+(defn ex? [x]
+  (instance? Exception x))
