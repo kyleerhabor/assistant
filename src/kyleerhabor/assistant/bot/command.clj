@@ -7,6 +7,8 @@
    [kyleerhabor.assistant.bot.util :refer [avatar-url user]]
    [kyleerhabor.assistant.bot.schema :refer [max-get-channel-messages-limit message-flags]]
    [kyleerhabor.assistant.config :refer [config]]
+   [kyleerhabor.hue.schema.domain.series :as-alias series]
+   [kyleerhabor.hue.schema.domain.name :as-alias name]
    [cprop.tools :refer [merge-maps]]
    [discljord.messaging :as msg]
    [discljord.messaging.specs :refer [command-option-types interaction-response-types]]
@@ -25,6 +27,22 @@
                                   {:id (:id inter)
                                    :token (:token inter)}
                                   data)])
+
+(defn animanga [{inter :interaction}]
+  (let [id (:value (:query (:options (:data inter))))]
+    [[:get-animanga
+      {:id id
+       :handler (fn [series]
+                  [(respond inter
+                     {:type (:channel-message-with-source interaction-response-types)
+                      :opts {:data (if series
+                                     ;; :en > :ja. Naive, but works.
+                                     (let [[name & names] (sort-by ::name/language (::series/names series))]
+                                       {:embeds [{:title (::name/content name)
+                                                  :url (str (:url (:animanga (::commands config))) "/series/" (::name/id name))
+                                                  :description (str/join "\n" (map #(str "- " (::name/content %)) names))}]}) 
+                                     {:content "Not found."
+                                      :flags (:ephemeral message-flags)})}})])}]]))
 
 (defn avatar [{inter :interaction}]
   (let [user (if-let [usero (:user (:options user))]
@@ -106,7 +124,15 @@
    :value v})
 
 (def default-commands
-  {:avatar {:handler avatar
+  {:animanga {:handler animanga
+              :name "animanga"
+              :description "Searches for anime and manga."
+              :options {:query {:name "query"
+                                :type (:string command-option-types)
+                                :description "The anime or manga to search for."
+                                :required? true
+                                :min-length 4}}}
+   :avatar {:handler avatar
             :name "avatar"
             :description "Displays a user's avatar."
             :options {:user {:name "user"
@@ -214,10 +240,13 @@
 
 (defn discord-option [opt desc]
   (let [opt (-> opt
-              (select-keys [:type :name :description :required? :min-value :max-value :choices :options])
+              (select-keys [:type :name :description :required? :min-value :max-value :min-length :max-length :choices
+                            :options])
               (rename-keys {:required? :required
                             :min-value :min_value
-                            :max-value :max_value}))
+                            :max-value :max_value
+                            :min-length :min_length
+                            :max-length :max_length}))
         opt (sp/transform (sp/must :choices)
               (fn [choices]
                 (map
@@ -233,11 +262,10 @@
   (let [cmd* (select-keys cmd [:name :description :options])]
    (apply-discord-options cmd* desc)))
 
-(def discord-commands (map
-                         (fn [{:keys [id]
-                               :as desc}]
-                           (discord-command (id commands) desc))
-                         [{:id :avatar
+(def discord-commands (map #(discord-command ((:id %) commands) %)
+                         [{:id :animanga
+                           :options [{:id :query}]}
+                          {:id :avatar
                            :options [{:id :user}
                                      {:id :size
                                       :choices [{:id :s16}

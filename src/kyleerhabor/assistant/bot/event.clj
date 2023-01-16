@@ -4,6 +4,9 @@
    [clojure.java.io :as io]
    [kyleerhabor.assistant.bot.command :as cmd]
    [kyleerhabor.assistant.effect :as eff]
+   [kyleerhabor.assistant.remote :as r]
+   [kyleerhabor.hue.schema.domain.name :as-alias name]
+   [kyleerhabor.hue.schema.domain.series :as-alias series]
    [discljord.messaging :as msg]
    [taoensso.timbre :as log]))
 
@@ -37,10 +40,18 @@
                      :delete-message (fn [{:keys [channel-id message-id opts handler]}]
                                        (let [res (msg/delete-message! conn channel-id message-id opts)]
                                          (some-> handler (handle res conn))))
+                     :get-animanga (fn [{:keys [id handler]}]
+                                     (let [ident [::series/id id]
+                                           res (r/hue [{ident [{::series/names [::name/id ::name/content ::name/language]}]}])]
+                                       (if handler
+                                         (async/take! res
+                                           (fn [data]
+                                             (effect conn (handler (get data ident))))))))
                      :get-channel-messages (fn [{:keys [channel-id opts handler]}]
                                              (let [res (msg/get-channel-messages! conn channel-id opts)]
                                                (some-> handler (handle res conn))))}))
 
+;; I'd like to lift conn out soon.
 (defn interaction-create [_ inter conn]
   (let [router (cmd/router inter cmd/commands-named)]
     (if (seq (:path router))

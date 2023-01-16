@@ -1,1 +1,8 @@
-{}
+{:lint-as {com.rpl.specter/defcollector clojure.core/defn
+           com.rpl.specter/defdynamicnav clojure.core/defn
+           com.rpl.specter/defmacroalias clojure.core/def
+           com.rpl.specter/defnav clojure.core/defn
+           com.rpl.specter/defrichnav clojure.core/defn}
+ :hooks {:analyze-call {discljord.messaging/defendpoint hooks.discljord/defendpoint
+                        discljord.messaging.impl/defdispatch hooks.discljord/defdispatch
+                        discljord.messaging.impl/def-message-dispatch hooks.discljord/def-message-dispatch}}}

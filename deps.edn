@@ -1,16 +1,18 @@
 {:paths ["src" "resources"]
  :deps {org.clojure/clojure {:mvn/version "1.11.1"}
         org.clojure/core.async {:mvn/version "1.6.673"}
+        com.cognitect/transit-clj {:mvn/version "1.0.329"}
         com.fzakaria/slf4j-timbre {:mvn/version "0.3.21"}
         com.github.discljord/discljord {:mvn/version "1.3.1"}
         com.rpl/specter {:mvn/version "1.1.4"}
         com.taoensso/timbre {:mvn/version "6.0.4"}
         cprop/cprop {:mvn/version "0.1.19"}
+        hato/hato {:mvn/version "0.9.0"}
         mount/mount {:mvn/version "0.1.17"}
+        org.clojars.akiel/async-error {:mvn/version "0.3"}
         ;; I'd like to upgrade to version 2, but it causes the loggers to not be found.
         org.slf4j/log4j-over-slf4j {:mvn/version "1.7.36"}
         org.slf4j/jul-to-slf4j {:mvn/version "1.7.36"}
-        org.slf4j/jcl-over-slf4j {:mvn/version "1.7.36"}}
- :aliases {:db {:jvm-opts ["--add-opens=java.base/java.nio=ALL-UNNAMED"
-                           "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED"]}
-           :upload-commands {:exec-fn kyleerhabor.assistant.bot/upload-commands}}}
+        org.slf4j/jcl-over-slf4j {:mvn/version "1.7.36"} 
+        }
+ :aliases {:upload-commands {:exec-fn kyleerhabor.assistant.bot/upload-commands}}}
