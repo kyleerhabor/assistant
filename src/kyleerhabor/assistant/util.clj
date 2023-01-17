@@ -29,10 +29,3 @@
 
 (defn ex? [x]
   (instance? Exception x))
-
-(defn given
-  "Tests if `x` passes predicate `pred`, calling `then` if so with `x`, else returning `x`."
-  [x pred then]
-  (if (pred x)
-    (then x)
-    x))
