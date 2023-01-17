@@ -1,6 +1,7 @@
 (ns kyleerhabor.assistant.bot.command
   (:require
    [clojure.core.async :refer [<! go]]
+   [clojure.math :as math]
    [clojure.java.io :as io]
    [clojure.set :refer [rename-keys]]
    [clojure.string :as str]
@@ -18,7 +19,7 @@
    (java.time.temporal ChronoUnit)))
 
 ;; From 16 to 4096
-(def image-sizes (map #(long (Math/pow 2 %)) (range 4 13)))
+(def image-sizes (map #(long (math/pow 2 %)) (range 4 13)))
 
 (def max-image-size (last image-sizes))
 
@@ -46,16 +47,20 @@
 
 (defn avatar [{inter :interaction}]
   (let [data (:data inter)
-        user (if-let [usero (:user (:options data))]
+        options (:options data)
+        user (if-let [usero (:user options)]
                (get (:users (:resolved data)) (:value usero))
                (user inter))
-        size (or (:value (:size (:options data))) max-image-size)
-        attach? (:value (:attach (:options data)))
+        size (or (:value (:size options)) max-image-size)
+        attach? (:value (:attach options))
         url (avatar-url user size)]
     (if attach?
       [(respond inter
          {:type (:deferred-channel-message-with-source interaction-response-types)
           :handler (fn [_]
+                     ;; This kind of sucks since the hash and extension were already extracted in avatar-url, but it's
+                     ;; easier than saving a variable for both parts above then constructing the filename again
+                     ;; (especially since it needs to account for default avatars).
                      (let [path (.getPath (io/as-url url))
                            filename (subs path (inc (str/last-index-of path \/)))]
                        ;; TODO: Add error handling for when attaching the image would be too large. I tried with a
