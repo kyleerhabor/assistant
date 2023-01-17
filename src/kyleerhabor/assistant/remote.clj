@@ -2,7 +2,7 @@
   (:require
    [clojure.core.async :refer [go <!]]
    [kyleerhabor.assistant.config :refer [config]]
-   [kyleerhabor.assistant.util :refer [ex? handle-chan read-transit write-transit]]
+   [kyleerhabor.assistant.util :refer [ex? given handle-chan read-transit write-transit]]
    [hato.client :as hc])
   (:import (java.time Duration)))
 
@@ -29,6 +29,6 @@
     (let [req (assoc (hue-request (query (str (write-transit q :json))))
                 :as :byte-array)
           res (<! (async req))]
-      (if (ex? res)
-        res
-        (read-transit (:body res) :json)))))
+      (given res (complement ex?)
+        (fn [{:keys [body]}]
+          (read-transit body :json))))))
