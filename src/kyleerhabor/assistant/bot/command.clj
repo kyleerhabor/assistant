@@ -45,11 +45,12 @@
                                       :flags (:ephemeral message-flags)})}})])}]]))
 
 (defn avatar [{inter :interaction}]
-  (let [user (if-let [usero (:user (:options user))]
-               (get (:users (:resolved (:data inter))) (:value usero))
+  (let [data (:data inter)
+        user (if-let [usero (:user (:options data))]
+               (get (:users (:resolved data)) (:value usero))
                (user inter))
-        size (or (:value (:size (:options (:data inter)))) max-image-size)
-        attach? (:value (:attach (:options (:data inter))))
+        size (or (:value (:size (:options data))) max-image-size)
+        attach? (:value (:attach (:options data)))
         url (avatar-url user size)]
     (if attach?
       [(respond inter
