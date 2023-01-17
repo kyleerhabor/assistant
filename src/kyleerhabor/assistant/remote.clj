@@ -9,10 +9,10 @@
 (defn async [req] ; Maybe a better name?
   (handle-chan (partial hc/request (assoc req :async? true))))
 
-(defn query [q]
+(defn query [body]
   {:accept :transit+json
    :content-type :transit+json
-   :body (str (write-transit q :json))})
+   :body body})
 
 (def default-timeout (.toMillis (Duration/ofSeconds 30)))
 
@@ -26,7 +26,8 @@
 
 (defn hue [q]
   (go
-    (let [req (assoc (hue-request (query q)) :as :byte-array)
+    (let [req (assoc (hue-request (query (str (write-transit q :json))))
+                :as :byte-array)
           res (<! (async req))]
       (if (ex? res)
         res
