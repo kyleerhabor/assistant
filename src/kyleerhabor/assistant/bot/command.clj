@@ -148,7 +148,7 @@
                              :type (:integer command-option-types)
                              :description (str
                                             "The largest size to return the avatar in. Actual avatar size will be lower"
-                                            "if unavailable.")
+                                            " if unavailable.")
                              ;; No, I'm not going to auto-generate the keys from a mere number. The keys are names for
                              ;; programmers (a separate space). I've dealt with worse cases of auto-generated names
                              ;; (GraphQL struct generator in Swift), and it's not fun.
@@ -171,7 +171,7 @@
                                ;; links appear as attachments.
                                :description (str
                                               "Whether or not to send the avatar as an attachment. Useful for retaining"
-                                              "avatars after updates.")}}}
+                                              " avatars after updates.")}}}
    :purge {:handler purge
            :name "purge"
            :description "Deletes messages from a channel." ; Should it be "in" instead of "from"?
