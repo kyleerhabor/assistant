@@ -11,6 +11,7 @@
    [kyleerhabor.hue.schema.domain.series :as-alias series]
    [kyleerhabor.hue.schema.domain.name :as-alias name]
    [cprop.tools :refer [merge-maps]]
+   [discljord.permissions :as perm]
    [discljord.messaging :as msg]
    [discljord.messaging.specs :refer [command-option-types interaction-response-types]]
    [com.rpl.specter :as sp])
@@ -82,6 +83,10 @@
                    :flags (:ephemeral message-flags)}}}))
 
 (defn purge [{inter :interaction}]
+  ;; It's a little unsafe to parse :permissions as a long since it could be too large. Discord recommends using a big
+  ;; integer. Also, the permission namespace Discljord provides isn't great, in my opinion, as it relies on one
+  ;; implicit var for the permissions (e.g. if Discord creates a new permission, Discljord has to update the var,
+  ;; unless we're able to use something like `alter-root-var`).
   (let [cid (:channel-id inter)
         amount (:value (:amount (:options (:data inter))))]
     [[:get-channel-messages
@@ -94,8 +99,8 @@
                   ;; Does time manipulation *really* have anything to do with my problem?
                   ;;
                   ;; It may be possible to extract the time from the interaction and use that to measure how old a
-                  ;; message is, but since :get-channel-messages is asynchronous, that time could be out of sync again.
-                  ;; This is most likely an uphill battle not worth fighting, so let's compromise instead.
+                  ;; message is, but since :get-channel-messages is asynchronous, that time could be out of sync
+                  ;; again. This is most likely an uphill battle not worth fighting, so let's compromise instead.
                   ;;
                   ;; For ideas: https://github.com/DasWolke/SnowTransfer/blob/master/src/methods/Channels.ts#L420
                   (let [old (-> (Instant/now)
@@ -175,6 +180,8 @@
    :purge {:handler purge
            :name "purge"
            :description "Deletes messages from a channel." ; Should it be "in" instead of "from"?
+           :permissions [:manage-messages]
+           :dms? false
            :options {:amount {:name "amount"
                               :type (:integer command-option-types)
                               :description "The largest number of messages to delete. Actual amount may be lower."
@@ -265,8 +272,12 @@
 (defn discord-command
   "Converts a command into a representation (map) compatible with Discord (for upload)."
   [cmd desc]
-  (let [cmd* (select-keys cmd [:name :description :options])]
-   (apply-discord-options cmd* desc)))
+  (let [cmd (-> cmd
+              (select-keys [:name :description :permissions :dms? :options])
+              (rename-keys {:permissions :default_member_permissions
+                            :dms? :dm_permission}))
+        cmd (sp/transform (sp/must :default_member_permissions) perm/permission-int cmd)]
+    (apply-discord-options cmd desc)))
 
 (def discord-commands (map #(discord-command ((:id %) commands) %)
                          [{:id :animanga
