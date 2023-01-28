@@ -5,9 +5,10 @@
    [clojure.java.io :as io]
    [clojure.set :refer [rename-keys]]
    [clojure.string :as str]
-   [kyleerhabor.assistant.bot.util :refer [avatar-url user]]
    [kyleerhabor.assistant.bot.schema :refer [max-get-channel-messages-limit message-flags]]
+   [kyleerhabor.assistant.bot.util :refer [avatar-url user]]
    [kyleerhabor.assistant.config :refer [config]]
+   [kyleerhabor.assistant.database :as db]
    [kyleerhabor.hue.schema.domain.series :as-alias series]
    [kyleerhabor.hue.schema.domain.name :as-alias name]
    [cprop.tools :refer [merge-maps]]
@@ -84,9 +85,9 @@
 
 (defn purge [{inter :interaction}]
   ;; It's a little unsafe to parse :permissions as a long since it could be too large. Discord recommends using a big
-  ;; integer. Also, the permission namespace Discljord provides isn't great, in my opinion, as it relies on one
-  ;; implicit var for the permissions (e.g. if Discord creates a new permission, Discljord has to update the var,
-  ;; unless we're able to use something like `alter-root-var`).
+  ;; integer. Also, the permission namespace Discljord provides isn't great, in my opinion, as it relies on one implicit
+  ;; var for the permissions (e.g. if Discord creates a new permission, Discljord has to update the var, unless we're
+  ;; able to use something like `alter-root-var`).
   (let [cid (:channel-id inter)
         amount (:value (:amount (:options (:data inter))))]
     [[:get-channel-messages
@@ -129,6 +130,67 @@
                         {:channel-id cid
                          :msg-ids ids
                          :handler deleted-response}]])))}]]))
+
+(defn tag-create [{inter :interaction}]
+  (def inter inter)
+  (let [name (:value (:name (:options (:data inter))))
+        db @db/db
+        gt-path [:guilds (:guild-id inter) :tags]]
+    (if (some #(= name (:name (get-in db %))) (get-in db gt-path))
+      [(respond inter
+         {:type (:channel-message-with-source interaction-response-types)
+          :opts {:data {:content "Tag with name already exists."
+                        :flags (:ephemeral message-flags)}}})]
+      (do
+        (swap! db/db
+          (fn [db]
+            (let [id (random-uuid)
+                  t-path [:tags id]
+                  title (:value (:title (:options (:data inter))))
+                  desc (:value (:description (:options (:data inter))))]
+              (-> db
+                (assoc-in t-path {:id id
+                                  :name name
+                                  :title title
+                                  :description desc})
+                (update-in gt-path conj t-path)))))
+        [(respond inter
+           {:type (:channel-message-with-source interaction-response-types)
+            :opts {:data {:content "Tag created."}}})]))))
+
+(defn tag-display [{inter :interaction}]
+  [(respond inter
+     {:type (:channel-message-with-source interaction-response-types)
+      :opts {:data (let [name (:value (:name (:options (:data inter))))
+                         db @db/db]
+                     (if-let [t (first (filter #(= name (:name (get-in db %))) (:tags (get (:guilds db) (:guild-id inter)))))]
+                       (let [tag (get-in db t)]
+                         {:embeds [{:title (or (:title tag) (:name tag))
+                                    :description (:description tag)}]})
+                       {:content "Tag not found."
+                        :flags (:ephemeral message-flags)}))}})])
+
+(defn tag-delete [{inter :interaction}]
+  (let [name (:value (:name (:options (:data inter))))
+        db @db/db
+        gt-path [:guilds (:guild-id inter) :tags]]
+    (if-let [t (first (filter #(= name (:name (get-in db %))) (get-in db gt-path)))]
+      (let [id (:id (get-in db t))]
+        (swap! db/db
+          (fn [db]
+            (-> db
+              (update :tags dissoc id)
+              (update-in gt-path (fn [ts]
+                                   (remove (fn [[_ tid]]
+                                             (= tid id)) ts))))))
+        [(respond inter
+           {:type (:channel-message-with-source interaction-response-types)
+            :opts {:data {:content "Tag deleted."
+                          :flags (:ephemeral message-flags)}}})])
+      [(respond inter
+         {:type (:channel-message-with-source interaction-response-types)
+          :opts {:data {:content "Tag not found."
+                        :flags (:ephemeral message-flags)}}})])))
 
 (defn choice [v]
   {:name (str v)
@@ -187,7 +249,42 @@
                               :description "The largest number of messages to delete. Actual amount may be lower."
                               :required? true
                               :min-value 1
-                              :max-value 100}}}})
+                              :max-value 100}}}
+   :tag {:name "tag"
+         :description "Response facilities."
+         :options {:create {:handler tag-create
+                            :name "create"
+                            :type (:sub-command command-option-types)
+                            :description "Creates a tag."
+                            :options {:name {:name "name"
+                                             :type (:string command-option-types)
+                                             :description "The name for the tag."
+                                             :required? true}
+                                      :title {:name "title"
+                                              :type (:string command-option-types)
+                                              :description (str
+                                                             "The text to use for the title, defauling to the provided"
+                                                             " name.")}
+                                      :description {:name "description"
+                                                    :type (:string command-option-types)
+                                                    :description "The text to use for the description."}}}
+                   ;; Maybe provide autocompletion?
+                   :display {:handler tag-display
+                             :name "display"
+                             :type (:sub-command command-option-types)
+                             :description "Displays a tag."
+                             :options {:name {:name "name"
+                                              :type (:string command-option-types)
+                                              :description "The name of the tag."
+                                              :required? true}}}
+                   :delete {:handler tag-delete
+                            :name "delete"
+                            :type (:sub-command command-option-types)
+                            :description "Deletes a tag."
+                            :options {:name {:name "name"
+                                             :type (:string command-option-types)
+                                             :description "The name of the tag."
+                                             :required? true}}}}}})
 
 (def commands (merge-maps default-commands (::commands config)))
 
@@ -280,8 +377,8 @@
     (apply-discord-options cmd desc)))
 
 (def discord-commands (map #(discord-command ((:id %) commands) %)
-                         [{:id :animanga
-                           :options [{:id :query}]}
+                         [#_{:id :animanga
+                             :options [{:id :query}]}
                           {:id :avatar
                            :options [{:id :user}
                                      {:id :size
@@ -296,7 +393,16 @@
                                                 {:id :s4096}]}
                                      {:id :attach}]}
                           {:id :purge
-                           :options [{:id :amount}]}]))
+                           :options [{:id :amount}]}
+                          {:id :tag
+                           :options [{:id :create
+                                      :options [{:id :name}
+                                                {:id :title}
+                                                {:id :description}]}
+                                     {:id :display
+                                      :options [{:id :name}]}
+                                     {:id :delete
+                                      :options [{:id :name}]}]}]))
 
 (defn upload
   ([conn] (upload conn discord-commands))

@@ -2,16 +2,7 @@
 .cpcache/
 
 # Database
-/db/
-
-# Linting
-#
-# clj-kondo defines lints for popular libraries at the directory folder, which is annoying, since future adds could leak
-# into the version control.
-.clj-kondo/*
-!.clj-kondo/config.edn
-!.clj-kondo/hooks
-.lsp/.cache/
+db.data
 
 # Config (default)
 resources/config.edn
