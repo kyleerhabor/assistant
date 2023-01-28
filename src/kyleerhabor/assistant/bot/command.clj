@@ -132,7 +132,6 @@
                          :handler deleted-response}]])))}]]))
 
 (defn tag-create [{inter :interaction}]
-  (def inter inter)
   (let [name (:value (:name (:options (:data inter))))
         db @db/db
         gt-path [:guilds (:guild-id inter) :tags]]
