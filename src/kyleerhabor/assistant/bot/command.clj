@@ -262,9 +262,7 @@
                                              :required? true}
                                       :title {:name "title"
                                               :type (:string command-option-types)
-                                              :description (str
-                                                             "The text to use for the title, defauling to the provided"
-                                                             " name.")}
+                                              :description "The text to use for the title, defauling to the provided name."}
                                       :description {:name "description"
                                                     :type (:string command-option-types)
                                                     :description "The text to use for the description."}}}
