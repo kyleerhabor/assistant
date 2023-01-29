@@ -30,4 +30,4 @@
     (let [req (assoc (hue-request (query (str (write-transit q :json))))
                 :as :byte-array)
           res (<! (async req))]
-      (sp/transform ex? #(read-transit (:body %) :json) res))))
+      (sp/transform (complement ex?) #(read-transit (:body %) :json) res))))
