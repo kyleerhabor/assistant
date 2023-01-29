@@ -2,17 +2,18 @@
   (:require
    [clojure.core.async :refer [<! go]]
    [clojure.math :as math]
-   [clojure.java.io :as io]
    [clojure.set :refer [rename-keys]]
    [clojure.string :as str]
+   [kyleerhabor.assistant.bot.cdn :as cdn]
    [kyleerhabor.assistant.bot.schema :refer [max-get-channel-messages-limit message-flags]]
-   [kyleerhabor.assistant.bot.util :refer [avatar-url user]]
+   [kyleerhabor.assistant.bot.util :refer [user]]
    [kyleerhabor.assistant.config :refer [config]]
    [kyleerhabor.assistant.database :as db]
    [kyleerhabor.hue.schema.domain.series :as-alias series]
    [kyleerhabor.hue.schema.domain.name :as-alias name]
    [cprop.tools :refer [merge-maps]]
    [discljord.permissions :as perm]
+   [discljord.cdn :as dcdn]
    [discljord.messaging :as msg]
    [discljord.messaging.specs :refer [command-option-types interaction-response-types]]
    [com.rpl.specter :as sp])
@@ -54,25 +55,32 @@
                (get (:users (:resolved data)) (:value usero))
                (user inter))
         size (or (:value (:size options)) max-image-size)
-        attach? (:value (:attach options))
-        url (avatar-url user size)]
+        ;; NOTE: While this works, it's an easy solution that's coupled to the value given to Discord. A proper
+        ;; converter would be better than just passing it to `keyword`.
+        format (keyword (:value (:format options)))
+        attach? (:value (:attach? options))
+        path (if-let [hash (:avatar user)]
+               (cdn/user-avatar user (or format (cdn/format hash)))
+               (cdn/default-user-avatar user))
+        url (dcdn/resize (str dcdn/base-url path) size)]
     (if attach?
       [(respond inter
          {:type (:deferred-channel-message-with-source interaction-response-types)
           :handler (fn [_]
-                     ;; This kind of sucks since the hash and extension were already extracted in avatar-url, but it's
-                     ;; easier than saving a variable for both parts above then constructing the filename again
-                     ;; (especially since it needs to account for default avatars).
-                     (let [path (.getPath (io/as-url url))
-                           filename (subs path (inc (str/last-index-of path \/)))]
+                     ;; This is better than my previous implementation of constructing the URL as a string, converting
+                     ;; it to a URL object, then extracting the path; but it's still inefficient since the cdn functions
+                     ;; construct a file-compatible name already. I'm not sure if I want to split it up, but it would
+                     ;; likely be positive if I did, since the cdn would become even more general-purpose.
+                     (let [filename (subs path (inc (str/last-index-of path "/")))]
                        ;; TODO: Add error handling for when attaching the image would be too large. I tried with a
                        ;; followup in a followup, but that didn't work. :(
                        [[:create-followup-message {:app-id (:application-id inter)
                                                    :token (:token inter)
                                                    :opts {:stream {:content url
                                                                    :filename filename}}}]]))})]
-      [(respond inter {:type (:channel-message-with-source interaction-response-types)
-                       :opts {:data {:content url}}})])))
+      [(respond inter
+         {:type (:channel-message-with-source interaction-response-types)
+          :opts {:data {:content url}}})])))
 
 (defn purge-result [inter n]
   (respond inter
@@ -230,14 +238,26 @@
                                                     :s1024 1024
                                                     :s2048 2048
                                                     :s4096 4096} choice)}
-                      :attach {:name "attach"
-                               :type (:boolean command-option-types)
-                               ;; The second sentence could be improved. After what updates? Also, to users
-                               ;; in the app, the first part may be confusing, since sending avatars as
-                               ;; links appear as attachments.
-                               :description (str
-                                              "Whether or not to send the avatar as an attachment. Useful for retaining"
-                                              " avatars after updates.")}}}
+                      :format {:name "format"
+                               :type (:string command-option-types)
+                               ;; Should it be "file format" or "image format" instead of just "format"?
+                               :description "The format to return the avatar in, defaulting to PNG."
+                               ;; See https://discord.com/developers/docs/reference#image-formatting-image-formats
+                               :choices {:png {:name "PNG"
+                                               :value "png"}
+                                         :jpg {:name "JPEG"
+                                               :value "jpg"}
+                                         :webp {:name "WebP"
+                                                :value "webp"}
+                                         :gif {:name "GIF"
+                                               :value "gif"}}}
+                      :attach? {:name "attach"
+                                :type (:boolean command-option-types)
+                                ;; The second sentence could be improved. After what updates? Also, to users in the app,
+                                ;; the first part may be confusing, since sending avatars as links appear as attachments.
+                                :description (str
+                                               "Whether or not to send the avatar as an attachment. Useful for retaining"
+                                               " avatars after updates.")}}}
    :purge {:handler purge
            :name "purge"
            :description "Deletes messages from a channel." ; Should it be "in" instead of "from"?
@@ -388,7 +408,12 @@
                                                 {:id :s1024}
                                                 {:id :s2048}
                                                 {:id :s4096}]}
-                                     {:id :attach}]}
+                                     {:id :format
+                                      :choices [{:id :png}
+                                                {:id :jpg}
+                                                {:id :webp}
+                                                {:id :gif}]}
+                                     {:id :attach?}]}
                           {:id :purge
                            :options [{:id :amount}]}
                           {:id :tag
