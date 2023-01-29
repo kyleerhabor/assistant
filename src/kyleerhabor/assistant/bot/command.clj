@@ -55,8 +55,6 @@
                (get (:users (:resolved data)) (:value usero))
                (user inter))
         size (or (:value (:size options)) max-image-size)
-        ;; NOTE: While this works, it's an easy solution that's coupled to the value given to Discord. A proper
-        ;; converter would be better than just passing it to `keyword`.
         format (keyword (:value (:format options)))
         attach? (:value (:attach? options))
         path (if-let [hash (:avatar user)]
