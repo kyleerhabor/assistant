@@ -20,14 +20,17 @@
      default)))
 
 (defn user-avatar
-  ([data] (user-avatar data (format (:avatar data))))
-  ([data format]
-   (str "/avatars/" (:id data) \/ (file (:avatar data) format))))
+  ([id avatar] (user-avatar+ id avatar (format avatar)))
+  ([id avatar format]
+   (str "/avatars/" id \/ (file avatar format))))
+
+(defn disnum [discrim]
+  (mod (parse-long discrim) 5))
 
 (defn default-user-avatar
-  ([data] (default-user-avatar data default-format))
-  ([data format]
-   (str "/embed/avatars/" (file (mod (parse-long (:discriminator data)) 5) format))))
+  ([n] (default-user-avatar n default-format))
+  ([n format]
+   (str "/embed/avatars/" (file n format))))
 
 (comment
   (require

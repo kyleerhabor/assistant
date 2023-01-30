@@ -49,27 +49,32 @@
                                       :flags (:ephemeral message-flags)})}})])}]]))
 
 (defn avatar [{inter :interaction}]
+  (def inter inter)
   (let [data (:data inter)
         options (:options data)
         user (if-let [usero (:user options)]
                (get (:users (:resolved data)) (:value usero))
                (user inter))
+        id (:id user)
+        hash (:avatar user)
         size (or (:value (:size options)) max-image-size)
-        format (keyword (:value (:format options)))
+        name (or hash (cdn/disnum (:discriminator user)))
+        ;; If the user has a custom avatar, use the option. Else, use the default format. Default avatars only support .png
+        format (or (if hash (keyword (:value (:format options)))) cdn/default-format)
+        ;; Discord does not support displaying non-animated avatars with .gif
+        format (if (and (= :gif format) (not (dcdn/animated? hash)))
+                 cdn/default-format
+                 format)
         attach? (:value (:attach? options))
-        path (if-let [hash (:avatar user)]
-               (cdn/user-avatar user (or format (cdn/format hash)))
-               (cdn/default-user-avatar user))
+        path (if hash
+               (cdn/user-avatar id hash format)
+               (cdn/default-user-avatar name))
         url (dcdn/resize (str dcdn/base-url path) size)]
     (if attach?
       [(respond inter
          {:type (:deferred-channel-message-with-source interaction-response-types)
           :handler (fn [_]
-                     ;; This is better than my previous implementation of constructing the URL as a string, converting
-                     ;; it to a URL object, then extracting the path; but it's still inefficient since the cdn functions
-                     ;; construct a file-compatible name already. I'm not sure if I want to split it up, but it would
-                     ;; likely be positive if I did, since the cdn would become even more general-purpose.
-                     (let [filename (subs path (inc (str/last-index-of path "/")))]
+                     (let [filename (cdn/file name format)]
                        ;; TODO: Add error handling for when attaching the image would be too large. I tried with a
                        ;; followup in a followup, but that didn't work. :(
                        [[:create-followup-message {:app-id (:application-id inter)
