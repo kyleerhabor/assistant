@@ -49,7 +49,6 @@
                                       :flags (:ephemeral message-flags)})}})])}]]))
 
 (defn avatar [{inter :interaction}]
-  (def inter inter)
   (let [data (:data inter)
         options (:options data)
         user (if-let [usero (:user options)]
