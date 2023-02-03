@@ -9,6 +9,7 @@
    [kyleerhabor.assistant.bot.util :refer [user]]
    [kyleerhabor.assistant.config :refer [config]]
    [kyleerhabor.assistant.database :as db]
+   [kyleerhabor.assistant.effect :as fx]
    [kyleerhabor.hue.schema.domain.series :as-alias series]
    [kyleerhabor.hue.schema.domain.name :as-alias name]
    [cprop.tools :refer [merge-maps]]
@@ -26,72 +27,111 @@
 
 (def max-image-size (last image-sizes))
 
-(defn respond [inter data]
-  [:create-interaction-response (merge
-                                  {:id (:id inter)
-                                   :token (:token inter)}
-                                  data)])
+(defn respond [inter]
+  [:create-interaction-response {:id (:id inter)
+                                 :token (:token inter)}])
+
+(defn error [inter]
+  (fx/update (respond inter)
+    (fn [data]
+      (assoc data
+        :type (:channel-message-with-source interaction-response-types)
+        :opts {:data {:flags (:ephemeral message-flags)}}))))
 
 (defn animanga [{inter :interaction}]
   (let [id (:value (:query (:options (:data inter))))]
     [[:get-animanga
       {:id id
        :handler (fn [series]
-                  [(respond inter
-                     {:type (:channel-message-with-source interaction-response-types)
-                      :opts {:data (if series
-                                     ;; :en > :ja. Naive, but works.
-                                     (let [[name & names] (sort-by ::name/language (::series/names series))]
-                                       {:embeds [{:title (::name/content name)
-                                                  :url (str (:url (:animanga (::commands config))) "/series/" (::name/id name))
-                                                  :description (str/join "\n" (map #(str "- " (::name/content %)) names))}]}) 
-                                     {:content "Not found."
-                                      :flags (:ephemeral message-flags)})}})])}]]))
+                  [(fx/update (respond inter)
+                     (fn [data]
+                       (assoc data
+                         :type (:channel-message-with-source interaction-response-types)
+                         :opts {:data (if series
+                                        ;; :en > :ja. Naive, but works.
+                                        (let [[name & names] (sort-by ::name/language (::series/names series))]
+                                          {:embeds [{:title (::name/content name)
+                                                     :url (str (:url (:animanga (::commands config))) "/series/" (::name/id name))
+                                                     :description (str/join "\n" (map #(str "- " (::name/content %)) names))}]}) 
+                                        {:content "Not found."
+                                         :flags (:ephemeral message-flags)})})))])}]]))
+
+(defn avatar-for-user [inter]
+  (let [data (:data inter)
+        uid (:value (:user (:options data)))
+        usr (get (:users (:resolved data)) uid)
+        user (or usr (user inter))
+        hash (:avatar user)
+        ;; Some coupling here with the and since it's aware of the user default
+        fmt (or (:value (:format (:options data))) (and hash (name (cdn/format hash))))]
+    {:name hash
+     :format fmt
+     :path (cdn/path (:user-avatar cdn/endpoints) {:id (:id user)
+                                                   :avatar hash
+                                                   :format fmt})}))
+
+(defn avatar-for-user-default [inter]
+  (let [data (:data inter)
+        uid (:value (:user (:options data)))
+        usr (get (:users (:resolved data)) uid)
+        user (or usr (user inter))
+        n (cdn/disnum (parse-long (:discriminator user)))
+        fmt (name cdn/default-format)]
+    {:name n
+     :format fmt
+     :path (cdn/path (:default-user-avatar cdn/endpoints) {:number n
+                                                           :format fmt})}))
+
+(defn avatar-response [inter {:keys [name format]
+                              :as image}]
+  (let [options (:options (:data inter))]
+    (if (and (= "gif" format) (not (dcdn/animated? name)))
+      [(fx/update (error inter)
+         (fn [data]
+           (assoc-in data [:opts :data :content] "GIF format only supports animated avatars.")))]
+      (let [size (or (:value (:size options)) max-image-size)
+            url (dcdn/resize (str dcdn/base-url (:path image)) size)
+            attach? (:value (:attach? options))]
+        [(fx/update (respond inter)
+           (fn [data]
+             (if attach?
+               (assoc data
+                 :type (:deferred-channel-message-with-source interaction-response-types)
+                 :handler (fn [_]
+                            (let [filename (cdn/file name format)]
+                              ;; TODO: Add error handling for when attaching the image would be too large. I tried
+                              ;; with a followup in a followup, but that didn't work.
+                              [[:create-followup-message {:app-id (:application-id inter)
+                                                          :token (:token inter)
+                                                          :opts {:stream {:content url
+                                                                          :filename filename}}}]])))
+               (assoc data
+                 :type (:channel-message-with-source interaction-response-types)
+                 :opts {:data {:content url}}))))]))))
 
 (defn avatar [{inter :interaction}]
-  (let [data (:data inter)
-        options (:options data)
-        user (if-let [usero (:user options)]
-               (get (:users (:resolved data)) (:value usero))
-               (user inter))
-        id (:id user)
-        hash (:avatar user)
-        size (or (:value (:size options)) max-image-size)
-        name (or hash (cdn/disnum (:discriminator user)))
-        ;; If the user has a custom avatar, use the option. Else, use the default format. Default avatars only support .png
-        format (or (if hash (keyword (:value (:format options)))) cdn/default-format)
-        ;; Discord does not support displaying non-animated avatars with .gif
-        format (if (and (= :gif format) (not (dcdn/animated? hash)))
-                 cdn/default-format
-                 format)
-        attach? (:value (:attach? options))
-        path (if hash
-               (cdn/user-avatar id hash format)
-               (cdn/default-user-avatar name))
-        url (dcdn/resize (str dcdn/base-url path) size)]
-    (if attach?
-      [(respond inter
-         {:type (:deferred-channel-message-with-source interaction-response-types)
-          :handler (fn [_]
-                     (let [filename (cdn/file name format)]
-                       ;; TODO: Add error handling for when attaching the image would be too large. I tried with a
-                       ;; followup in a followup, but that didn't work. :(
-                       [[:create-followup-message {:app-id (:application-id inter)
-                                                   :token (:token inter)
-                                                   :opts {:stream {:content url
-                                                                   :filename filename}}}]]))})]
-      [(respond inter
-         {:type (:channel-message-with-source interaction-response-types)
-          :opts {:data {:content url}}})])))
+  ;; Quite a small implementation, but that's because it was previously refactored to support displaying banners and
+  ;; server avatars for members. It turned out, however, that Discord does not include the hashes for either in the
+  ;; interaction, so a request would need to be issued. I currently don't feel like going through the trouble of
+  ;; implementing it, so this partial remains.
+  (let [image (avatar-for-user inter)
+        image (if (:name image)
+                image
+                (avatar-for-user-default inter))]
+    (avatar-response inter image)))
+    
 
 (defn purge-result [inter n]
-  (respond inter
-    {:type (:channel-message-with-source interaction-response-types)
-     :opts {:data {:content (case n
-                              0 "Could not delete messages."
-                              1 "Deleted 1 message."
-                              (str "Deleted " n " messages."))
-                   :flags (:ephemeral message-flags)}}}))
+  ;; This practically duplicates error—maybe rename it?
+  (fx/update (respond inter)
+    (fn [data]
+      (assoc data
+        :type (:channel-message-with-source interaction-response-types)
+        :opts {:data {:content (case n
+                                 0 "Could not delete messages."
+                                 1 "Deleted 1 message."
+                                 (str "Deleted " n " messages."))
+                      :flags (:ephemeral message-flags)}}))))
 
 (defn purge [{inter :interaction}]
   ;; It's a little unsafe to parse :permissions as a long since it could be too large. Discord recommends using a big
@@ -127,10 +167,9 @@
                         deleted-response (fn [success?]
                                            [(purge-result inter (if success? n 0))])]
                     (case n
-                      0 [(respond inter
-                           {:type (:channel-message-with-source interaction-response-types)
-                            :opts {:data {:content "No messages to delete."
-                                          :flags (:ephemeral message-flags)}}})]
+                      0 [(fx/update (error inter)
+                           (fn [data]
+                             (assoc-in data [:opts :data :content] "No messages to delete")))]
                       ;; Bulk deletes require at least two messages.
                       1 [[:delete-message
                           {:channel-id cid
@@ -146,10 +185,9 @@
         db @db/db
         gt-path [:guilds (:guild-id inter) :tags]]
     (if (some #(= name (:name (get-in db %))) (get-in db gt-path))
-      [(respond inter
-         {:type (:channel-message-with-source interaction-response-types)
-          :opts {:data {:content "Tag with name already exists."
-                        :flags (:ephemeral message-flags)}}})]
+      [(fx/update (error inter)
+         (fn [data]
+           (assoc-in data [:opts :data :content] "Tag with name already exists")))]
       (do
         (swap! db/db
           (fn [db]
@@ -163,21 +201,27 @@
                                   :title title
                                   :description desc})
                 (update-in gt-path conj t-path)))))
-        [(respond inter
-           {:type (:channel-message-with-source interaction-response-types)
-            :opts {:data {:content "Tag created."}}})]))))
+        [(fx/update (respond inter)
+           (fn [data]
+             (assoc data
+               :type (:channel-message-with-source interaction-response-types)
+               :opts {:data {:content "Tag created."}})))]))))
 
 (defn tag-display [{inter :interaction}]
-  [(respond inter
-     {:type (:channel-message-with-source interaction-response-types)
-      :opts {:data (let [name (:value (:name (:options (:data inter))))
-                         db @db/db]
-                     (if-let [t (first (filter #(= name (:name (get-in db %))) (:tags (get (:guilds db) (:guild-id inter)))))]
-                       (let [tag (get-in db t)]
-                         {:embeds [{:title (or (:title tag) (:name tag))
-                                    :description (:description tag)}]})
-                       {:content "Tag not found."
-                        :flags (:ephemeral message-flags)}))}})])
+  (let [name (:value (:name (:options (:data inter))))
+        db @db/db
+        guild (get (:guilds db) (:guild-id inter))]
+    (if-let [tag* (first (filter #(= name (:name (get-in db %))) (:tags guild)))]
+      (let [tag (get-in db tag*)]
+        [(fx/update (respond inter)
+           (fn [data]
+             (assoc data
+               :type (:channel-message-with-source interaction-response-types)
+               :opts {:data {:embeds [{:title (or (:title tag) (:name tag))
+                                       :description (:description tag)}]}})))])
+      [(fx/update (error inter)
+         (fn [data]
+           (assoc-in data [:opts :data :content] "Tag not found.")))])))
 
 (defn tag-delete [{inter :interaction}]
   (let [name (:value (:name (:options (:data inter))))
@@ -192,14 +236,14 @@
               (update-in gt-path (fn [ts]
                                    (remove (fn [[_ tid]]
                                              (= tid id)) ts))))))
-        [(respond inter
-           {:type (:channel-message-with-source interaction-response-types)
-            :opts {:data {:content "Tag deleted."
-                          :flags (:ephemeral message-flags)}}})])
-      [(respond inter
-         {:type (:channel-message-with-source interaction-response-types)
-          :opts {:data {:content "Tag not found."
-                        :flags (:ephemeral message-flags)}}})])))
+        [(fx/update (respond inter)
+           (fn [data]
+             (assoc data
+               :type (:channel-message-with-source interaction-response-types)
+               :opts {:data {:content "Tag deleted."}})))])
+      [(fx/update (error inter)
+         (fn [data]
+           (assoc-in data [:opts :data :content] "Tag not found.")))])))
 
 (defn choice [v]
   {:name (str v)
@@ -396,9 +440,7 @@
     (apply-discord-options cmd desc)))
 
 (def discord-commands (map #(discord-command ((:id %) commands) %)
-                         [#_{:id :animanga
-                             :options [{:id :query}]}
-                          {:id :avatar
+                         [{:id :avatar
                            :options [{:id :user}
                                      {:id :size
                                       :choices [{:id :s16}

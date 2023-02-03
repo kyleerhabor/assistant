@@ -7,6 +7,7 @@
    [kyleerhabor.assistant.remote :as r]
    [kyleerhabor.hue.schema.domain.name :as-alias name]
    [kyleerhabor.hue.schema.domain.series :as-alias series]
+   [discljord.formatting :as fmt]
    [discljord.messaging :as msg]
    [taoensso.timbre :as log]))
 
@@ -62,4 +63,13 @@
       ;; Shouldn't happen.
       (log/info "Command not found for interaction" inter))))
 
-(def handlers {:interaction-create [interaction-create]})
+(defn ready [_ {sid :session-id
+                :keys [user]
+                :as data} _]
+  (log/info (str "Ready! Connected as " (fmt/user-tag user) " / " (:id user) " (v" (:v data)
+              (if-let [[shard count] (:shard data)]
+                (str ", shard " shard \/ (dec count)))
+              (str ", session " sid ")"))))
+
+(def handlers {:interaction-create [interaction-create]
+               :ready [ready]})

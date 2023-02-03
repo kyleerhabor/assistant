@@ -14,15 +14,18 @@
      :gif
      default)))
 
-(defn user-avatar
-  ([id avatar] (user-avatar id avatar (format avatar)))
-  ([id avatar format]
-   (str "/avatars/" id \/ (file avatar format))))
-
 (defn disnum [discrim]
-  (mod (parse-long discrim) 5))
+  (mod discrim 5))
 
-(defn default-user-avatar
-  ([n] (default-user-avatar n default-format))
-  ([n format]
-   (str "/embed/avatars/" (file n format))))
+(defn cfile
+  ([k] (cfile k :format))
+  ([k fmt]
+   ["/" k "." fmt]))
+
+(def endpoints {:user-avatar (concat ["/avatars/" :id] (cfile :avatar))
+                :default-user-avatar (concat ["/embed/avatars"] (cfile :number))
+                :user-banner (concat ["/banners/" :id] (cfile :banner))
+                :guild-member-avatar (concat ["/guilds/" :guild-id "/users/" :user-id "/avatars"] (cfile :avatar))})
+
+(defn path [path m]
+  (apply str (map #(if (string? %) % (% m)) path)))
