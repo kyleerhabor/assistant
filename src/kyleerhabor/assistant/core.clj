@@ -1,6 +1,7 @@
 (ns kyleerhabor.assistant.core
   (:require
-   [kyleerhabor.assistant.bot]
+   [clojure.core.async :refer [<!!]]
+   [kyleerhabor.assistant.bot :as bot]
    [mount.core :as m]))
 
 (defn run []
@@ -10,11 +11,15 @@
   (m/stop))
 
 (defn system [start stop]
-  (start)
-  (.addShutdownHook (Runtime/getRuntime) (Thread. stop)))
+  (.addShutdownHook (Runtime/getRuntime) (Thread. stop))
+  (start))
 
 (defn -main []
-  (system run
+  (system
+    (fn []
+      (run)
+      ;; Block to finish processing events.
+      (<!! bot/events>))
     (fn []
       (stop)
       (shutdown-agents))))
@@ -22,6 +27,6 @@
 (comment
   ;; Run
   (run)
-  
+
   ;; Stop
   (stop))
