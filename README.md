@@ -14,12 +14,6 @@ With the introduction of interactions, many bots replaced their systems with sla
 
 I wanted a bot capable of providing a simple interface and experience, but couldn't find one I liked. In protest, Assistant was created to address those issues. The adoption of interactions contributes to a consistent system all users are familiar with and can benefit from (no help command!). Commands are designed to be minimalistic by only displaying the information essential to users, with options for configuration and convenient defaults where they make sense. When simplicity is not an option for a feature, it will be rejected or developed with a compromise. For example, while a [pick command](https://github.com/KyleErhabor/assistant/issues/17) would be useful, Discord does not support variadic arguments, and, hence, it hasn't been implemented. In comparison, the `/animanga` command only accepts an ID for its `query` parameter since many anime and manga share identical titles. To alleviate this burden, the command supports autocomplete, mapping titles to IDs. Assistant's principles are based on what makes traditional and slash commands appealing to developers and users so I hope you enjoy its design philosophy.
 
-*- Klay#7270*
-
 ## Installing
 
 Assistant is a privately hosted bot, so there is no public bot to invite. Instead, you'll need to install and invite your own instance.
-
-## License
-
-Licensed under the [Cooperative Software License](./LICENSE).
